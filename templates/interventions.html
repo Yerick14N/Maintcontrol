@@ -7,10 +7,40 @@
     {% if not is_trial_expired or current_user.is_activated or current_user.role == 'admin' %}
     <a href="{{ url_for('export_csv') }}" class="btn" data-i18n="export_csv">Exporter CSV</a>
     <a href="{{ url_for('export_pdf') }}" class="btn" data-i18n="export_pdf">Exporter PDF</a>
+    <a href="{{ url_for('export_advanced') }}" class="btn btn-small" data-i18n="export_advanced">Export avancé</a>
     {% endif %}
     <a href="{{ url_for('new_intervention') }}" class="btn primary" data-i18n="interventions_new">Nouvelle intervention</a>
   </div>
 </div>
+
+<form method="get" class="filter-bar">
+  <select name="status">
+    <option value="">{{ 'Tous statuts' }}</option>
+    <option value="open" {% if request.args.get('status')=='open' %}selected{% endif %}>Ouvert</option>
+    <option value="in_progress" {% if request.args.get('status')=='in_progress' %}selected{% endif %}>En cours</option>
+    <option value="done" {% if request.args.get('status')=='done' %}selected{% endif %}>Clôturé</option>
+  </select>
+  <select name="priority">
+    <option value="">{{ 'Toutes priorités' }}</option>
+    <option value="low" {% if request.args.get('priority')=='low' %}selected{% endif %}>Basse</option>
+    <option value="medium" {% if request.args.get('priority')=='medium' %}selected{% endif %}>Moyenne</option>
+    <option value="high" {% if request.args.get('priority')=='high' %}selected{% endif %}>Haute</option>
+  </select>
+  <select name="kind">
+    <option value="">{{ 'Tous types' }}</option>
+    <option value="corrective" {% if request.args.get('kind')=='corrective' %}selected{% endif %}>Correctif</option>
+    <option value="preventive" {% if request.args.get('kind')=='preventive' %}selected{% endif %}>Préventif</option>
+    <option value="installation" {% if request.args.get('kind')=='installation' %}selected{% endif %}>Installation</option>
+  </select>
+  <select name="category">
+    <option value="">{{ 'Toutes catégories' }}</option>
+    <option value="electricity" {% if request.args.get('category')=='electricity' %}selected{% endif %}>Électricité</option>
+    <option value="plumbing" {% if request.args.get('category')=='plumbing' %}selected{% endif %}>Plomberie</option>
+    <option value="hvac" {% if request.args.get('category')=='hvac' %}selected{% endif %}>HVAC</option>
+    <option value="it" {% if request.args.get('category')=='it' %}selected{% endif %}>IT</option>
+  </select>
+  <button type="submit" class="btn btn-small">Filtrer</button>
+</form>
 
 <table class="table">
   <thead>
@@ -21,6 +51,8 @@
       <th data-i18n="col_technician">Technicien</th>
       <th data-i18n="col_status">Statut</th>
       <th data-i18n="col_priority">Priorité</th>
+      <th data-i18n="col_kind">Type</th>
+      <th data-i18n="col_category">Catégorie</th>
       <th data-i18n="col_scheduled">Planifié</th>
       <th></th>
     </tr>
@@ -34,11 +66,17 @@
       <td>{{ it.technician_name }}</td>
       <td>{{ it.status }}</td>
       <td>{{ it.priority }}</td>
+      <td>{{ it.kind or "" }}</td>
+      <td>{{ it.category or "" }}</td>
       <td>{{ it.scheduled_date or "" }}</td>
-      <td><a href="{{ url_for('edit_intervention', intervention_id=it.id) }}" data-i18n="edit">Modifier</a></td>
+      <td>
+        <a href="{{ url_for('edit_intervention', intervention_id=it.id) }}" data-i18n="edit">Modifier</a>
+        |
+        <a href="{{ url_for('intervention_pdf', intervention_id=it.id) }}" data-i18n="pdf">PDF</a>
+      </td>
     </tr>
     {% else %}
-    <tr><td colspan="8" data-i18n="no_data">Aucune donnée</td></tr>
+    <tr><td colspan="10" data-i18n="no_data">Aucune donnée</td></tr>
     {% endfor %}
   </tbody>
 </table>

@@ -20,7 +20,6 @@ def _priority_score(intervention):
     else:
         score -= 10
 
-    # older interventions first
     try:
         created = datetime.fromisoformat(created_at)
         age_days = (datetime.utcnow() - created).days
@@ -28,7 +27,6 @@ def _priority_score(intervention):
     except Exception:
         pass
 
-    # scheduled today or overdue
     if scheduled:
         try:
             sd = datetime.fromisoformat(scheduled)
@@ -43,10 +41,6 @@ def _priority_score(intervention):
     return score
 
 def suggest_priorities(interventions):
-    """
-    Very simple "AI" engine that ranks interventions and labels them:
-    - CRITICAL, HIGH, NORMAL, LOW
-    """
     annotated = []
     for it in interventions:
         s = _priority_score(it)

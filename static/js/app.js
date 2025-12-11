@@ -18,9 +18,4 @@ async function loadTranslations(lang) {
 document.addEventListener("DOMContentLoaded", () => {
   const lang = document.body.getAttribute("data-lang") || "fr";
   loadTranslations(lang);
-
-  // Example of frontend automation using API
-  if (document.body.classList.contains("has-dashboard")) {
-    // Could fetch /api/interventions for dynamic widgets
-  }
 });

@@ -1,45 +1,37 @@
 
 # MaintControl
 
-MaintControl est un exemple complet de logiciel SaaS de gestion des interventions.
+MaintControl est un logiciel SaaS de gestion des interventions (clients / techniciens / admin) avec :
 
-## Technologies
+- gestion des licences et clés d'activation
+- période d'essai de 30 jours
+- IA de priorisation
+- multi-langues (FR / EN / ES / DE)
+- gestion des utilisateurs (création + suppression par l'admin uniquement)
+- champs d'organisation supplémentaires : type d'intervention, catégorie
+- filtres dans la liste des interventions
+- export CSV / PDF
 
-- Backend : Python 3 + Flask
-- Frontend : HTML + CSS + JavaScript
-- IA : moteur de priorisation simple dans `ai/scheduler.py`
-- Génération de PDF : reportlab
-- Export CSV : standard library
-- Générateur de clés d'activation :
-  - Côté serveur : routes Flask dans `app.py`
-  - Module Java optionnel : `java/LicenseKeyGenerator.java`
-
-## Lancement
-
-1. Créez un environnement virtuel et installez les dépendances :
+## Lancement en local (Windows / Flask 3.x)
 
 ```bash
 pip install -r requirements.txt
-```
-
-2. Démarrez le serveur Flask :
-
-```bash
 python app.py
 ```
 
-3. Ouvrez votre navigateur sur http://localhost:5000
+Accès par défaut :
+- admin / admin
+- user1..user5 / password
 
-## Comptes de démonstration
+## Déploiement sur Render
 
-- Administrateur : `admin` / `admin`
-- Utilisateurs techniques : `user1`, `user2`, `user3` / `password`
-- Clients : `user4`, `user5` / `password`
+1. Pousse ce dossier sur un dépôt GitHub.
+2. Sur Render, crée un nouveau service **Web** à partir de ce dépôt.
+3. Render utilisera :
 
-Chaque utilisateur non administrateur est en période d'essai de 30 jours.
-Les exports CSV/PDF et certaines fonctions avancées sont bloqués si la période d'essai est expirée et qu'aucune clé n'a été activée.
+- `requirements.txt` pour installer les dépendances
+- `Procfile` pour lancer l'application :
 
-## Langues
-
-Interface disponible en français, anglais, espagnol et allemand.
-La langue est sélectionnable dans la barre supérieure.
+```bash
+gunicorn app:app
+```

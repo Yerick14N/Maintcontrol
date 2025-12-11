@@ -1,7 +1,35 @@
 
 {% extends "base.html" %}
+{% block body_class %}has-dashboard{% endblock %}
 {% block content %}
 <h1 data-i18n="dashboard_title">Tableau de bord</h1>
+
+<section class="kpi-grid">
+  <div class="kpi-card kpi-total">
+    <span class="kpi-label" data-i18n="kpi_total">Total interventions</span>
+    <span class="kpi-value">{{ total_interventions }}</span>
+  </div>
+  <div class="kpi-card kpi-open">
+    <span class="kpi-label" data-i18n="kpi_open">Ouvertes</span>
+    <span class="kpi-value">{{ open_count }}</span>
+  </div>
+  <div class="kpi-card kpi-inprogress">
+    <span class="kpi-label" data-i18n="kpi_in_progress">En cours</span>
+    <span class="kpi-value">{{ in_progress }}</span>
+  </div>
+  <div class="kpi-card kpi-done">
+    <span class="kpi-label" data-i18n="kpi_done">Clôturées</span>
+    <span class="kpi-value">{{ done_count }}</span>
+  </div>
+  <div class="kpi-card kpi-late">
+    <span class="kpi-label" data-i18n="kpi_late">En retard</span>
+    <span class="kpi-value">{{ late_count }}</span>
+  </div>
+  <div class="kpi-card kpi-mine">
+    <span class="kpi-label" data-i18n="kpi_my_open">Mes interventions ouvertes</span>
+    <span class="kpi-value">{{ my_open }}</span>
+  </div>
+</section>
 
 <section class="grid-two">
   <div class="card">

@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 {% block content %}
 <h1>
@@ -27,8 +28,8 @@
   </label>
   <label>
     <span data-i18n="col_status">Statut</span>
+    {% set st = intervention.status if intervention else 'open' %}
     <select name="status">
-      {% set st = intervention.status if intervention else 'open' %}
       <option value="open" {% if st=='open' %}selected{% endif %}>Ouvert</option>
       <option value="in_progress" {% if st=='in_progress' %}selected{% endif %}>En cours</option>
       <option value="done" {% if st=='done' %}selected{% endif %}>Clôturé</option>
@@ -36,11 +37,32 @@
   </label>
   <label>
     <span data-i18n="col_priority">Priorité</span>
+    {% set pr = intervention.priority if intervention else 'medium' %}
     <select name="priority">
-      {% set pr = intervention.priority if intervention else 'medium' %}
       <option value="low" {% if pr=='low' %}selected{% endif %}>Basse</option>
       <option value="medium" {% if pr=='medium' %}selected{% endif %}>Moyenne</option>
       <option value="high" {% if pr=='high' %}selected{% endif %}>Haute</option>
+    </select>
+  </label>
+  <label>
+    <span data-i18n="col_kind">Type</span>
+    {% set kd = intervention.kind if intervention else '' %}
+    <select name="kind">
+      <option value="" {% if not kd %}selected{% endif %}></option>
+      <option value="corrective" {% if kd=='corrective' %}selected{% endif %}>Correctif</option>
+      <option value="preventive" {% if kd=='preventive' %}selected{% endif %}>Préventif</option>
+      <option value="installation" {% if kd=='installation' %}selected{% endif %}>Installation</option>
+    </select>
+  </label>
+  <label>
+    <span data-i18n="col_category">Catégorie</span>
+    {% set ct = intervention.category if intervention else '' %}
+    <select name="category">
+      <option value="" {% if not ct %}selected{% endif %}></option>
+      <option value="electricity" {% if ct=='electricity' %}selected{% endif %}>Électricité</option>
+      <option value="plumbing" {% if ct=='plumbing' %}selected{% endif %}>Plomberie</option>
+      <option value="hvac" {% if ct=='hvac' %}selected{% endif %}>HVAC</option>
+      <option value="it" {% if ct=='it' %}selected{% endif %}>IT</option>
     </select>
   </label>
   <label>
@@ -48,12 +70,11 @@
     <input type="text" name="scheduled_date" placeholder="2025-01-01T10:00:00" value="{{ intervention.scheduled_date if intervention else '' }}">
   </label>
 
-  <button type="submit" class="btn primary" data-i18n="save">Enregistrer</button>
+  <div class="form-actions">
+    <button type="submit" name="action" value="save" class="btn primary" data-i18n="save">Enregistrer</button>
+    {% if intervention %}
+    <button type="submit" name="action" value="delete" class="btn danger" data-i18n="delete" onclick="return confirm('Confirmer la suppression ?');">Supprimer</button>
+    {% endif %}
+  </div>
 </form>
-
-{% if intervention %}
-<form method="post" action="{{ url_for('delete_intervention', intervention_id=intervention.id) }}" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cette intervention ?');" style="margin-top:0.75rem;">
-  <button type="submit" class="btn danger" data-i18n="delete">Supprimer</button>
-</form>
-{% endif %}
 {% endblock %}

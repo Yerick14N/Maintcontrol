@@ -1,0 +1,84 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="users_title">Gestion des utilisateurs</h1>
+
+<section class="grid-two">
+  <div class="card">
+    <h2 data-i18n="users_create">Créer un nouvel utilisateur</h2>
+    <form method="post" class="form">
+      <input type="hidden" name="action" value="create">
+      <label>
+        <span data-i18n="users_username">Nom d'utilisateur</span>
+        <input type="text" name="username" required>
+      </label>
+      <label>
+        <span data-i18n="users_password">Mot de passe</span>
+        <input type="password" name="password" required>
+      </label>
+      <label>
+        <span data-i18n="users_role">Rôle</span>
+        <select name="role">
+          <option value="tech" selected>Technicien</option>
+          <option value="client">Client</option>
+          <option value="admin">Administrateur</option>
+        </select>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="start_trial" checked>
+        <span data-i18n="users_start_trial">Démarrer une période d'essai de 30 jours</span>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="activate_now">
+        <span data-i18n="users_activate_now">Activer immédiatement avec une clé d'activation générée</span>
+      </label>
+
+      <button type="submit" class="btn primary" data-i18n="users_create_btn">Créer l'utilisateur</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="users_list">Utilisateurs existants</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="users_username">Nom d'utilisateur</th>
+          <th data-i18n="users_role">Rôle</th>
+          <th data-i18n="users_created_at">Créé le</th>
+          <th data-i18n="users_trial_start">Début essai</th>
+          <th data-i18n="users_activated">Activé</th>
+          <th data-i18n="users_license_key">Clé</th>
+          <th data-i18n="users_actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.role }}</td>
+          <td>{{ u.created_at }}</td>
+          <td>{{ u.trial_start or '-' }}</td>
+          <td>{{ 'Oui' if u.is_activated else 'Non' }}</td>
+          <td>{{ u.license_key or '-' }}</td>
+          <td>
+            {% if u.role != 'admin' %}
+            <form method="post" style="display:inline" onsubmit="return confirm('Confirmer la suppression de cet utilisateur ?');">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <button type="submit" class="btn danger btn-small" data-i18n="users_delete">Supprimer</button>
+            </form>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

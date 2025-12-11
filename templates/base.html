@@ -8,15 +8,17 @@
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   </head>
-  <body data-lang="{{ lang }}">
+  <body data-lang="{{ lang }}" class="{% block body_class %}{% endblock %}">
     <header class="topbar">
       <div class="logo">MaintControl</div>
       {% if current_user %}
       <nav class="nav">
         <a href="{{ url_for('dashboard') }}" data-i18n="nav_dashboard">Tableau de bord</a>
         <a href="{{ url_for('list_interventions') }}" data-i18n="nav_interventions">Interventions</a>
+        <a href="{{ url_for('planning') }}" data-i18n="nav_planning">Planning</a>
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('admin_licenses') }}" data-i18n="nav_licenses">Licences</a>
+        <a href="{{ url_for('admin_users') }}" data-i18n="nav_users">Utilisateurs</a>
         {% endif %}
         <a href="{{ url_for('logout') }}" data-i18n="nav_logout">Déconnexion</a>
       </nav>
