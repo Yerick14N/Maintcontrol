@@ -222,6 +222,7 @@ def is_trial_expired(user):
     start = datetime.fromisoformat(trial_start)
     return datetime.utcnow() > start + timedelta(days=TRIAL_DAYS)
 
+
 def remaining_trial_days(user):
     if user is None or user["role"] == "admin" or user["is_activated"] or not user["trial_start"]:
         return None
@@ -229,7 +230,6 @@ def remaining_trial_days(user):
     remaining = (start + timedelta(days=TRIAL_DAYS) - datetime.utcnow()).days
     return max(0, remaining)
 
-def require_login
 def parse_planning_date(value):
     """Parse various simple date formats for planning (ISO, YYYY-MM-DD, DD/MM/YYYY...)."""
     if not value:
@@ -250,7 +250,7 @@ def parse_planning_date(value):
             continue
     return None
 
-(f):
+def require_login(f):
     from functools import wraps
     @wraps(f)
     def wrapper(*args, **kwargs):
