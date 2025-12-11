@@ -1,0 +1,72 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="billing_title">Facturation & paiements</h1>
+
+<section class="grid-two">
+  <div class="card">
+    <h2 data-i18n="billing_plan">Plan actuel</h2>
+    <p>
+      <strong>{{ company.plan_name or 'Essai / Gratuit' }}</strong><br>
+      <span data-i18n="billing_price_label">Prix mensuel estimé :</span>
+      {{ company.plan_price or 0 }} EUR
+    </p>
+    <p data-i18n="billing_hint">
+      Les paiements sont simulés pour la démo (pas de vrai prélèvement bancaire).
+    </p>
+    <h3 data-i18n="billing_create_invoice">Créer une facture</h3>
+    <form method="post">
+      <input type="hidden" name="action" value="create_invoice">
+      <label>
+        <span data-i18n="billing_amount">Montant (EUR)</span>
+        <input type="number" step="0.01" name="amount" value="49.00">
+      </label>
+      <label>
+        <span data-i18n="billing_description">Description</span>
+        <input type="text" name="description" value="Abonnement mensuel MaintControl">
+      </label>
+      <button type="submit" class="btn primary" data-i18n="billing_create_invoice_btn">Créer une facture</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="billing_invoices">Factures</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="billing_amount">Montant</th>
+          <th data-i18n="billing_status">Statut</th>
+          <th data-i18n="billing_created_at">Créée le</th>
+          <th data-i18n="billing_paid_at">Payée le</th>
+          <th data-i18n="billing_actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td>{{ inv.id }}</td>
+          <td>{{ inv.amount }} {{ inv.currency }}</td>
+          <td>{{ inv.status }}</td>
+          <td>{{ inv.created_at }}</td>
+          <td>{{ inv.paid_at or '-' }}</td>
+          <td>
+            {% if inv.status != 'paid' %}
+            <form method="post" style="display:inline">
+              <input type="hidden" name="action" value="pay_invoice">
+              <input type="hidden" name="invoice_id" value="{{ inv.id }}">
+              <button type="submit" class="btn btn-small" data-i18n="billing_pay_simulate">Simuler paiement</button>
+            </form>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

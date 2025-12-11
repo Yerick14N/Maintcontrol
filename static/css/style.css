@@ -86,6 +86,7 @@ label {
 
 input[type="text"],
 input[type="password"],
+input[type="number"],
 textarea,
 select {
   width: 100%;
@@ -341,6 +342,11 @@ select:focus {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+.help {
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 @media (max-width: 800px) {

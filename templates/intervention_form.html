@@ -18,14 +18,28 @@
     <span data-i18n="col_description">Description</span>
     <textarea name="description">{{ intervention.description if intervention else '' }}</textarea>
   </label>
+
   <label>
-    <span data-i18n="col_client">Client</span>
-    <input type="text" name="client_name" value="{{ intervention.client_name if intervention else current_user.username if current_user.role=='client' else '' }}">
+    <span data-i18n="customer_select">Client (base clients)</span>
+    {% set cid = intervention.customer_id if intervention else '' %}
+    <select name="customer_id">
+      <option value=""></option>
+      {% for c in customers %}
+      <option value="{{ c.id }}" {% if cid==c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
   </label>
+
+  <label>
+    <span data-i18n="col_client">Client chantier (texte)</span>
+    <input type="text" name="client_name" value="{{ intervention.client_name if intervention else '' }}">
+  </label>
+
   <label>
     <span data-i18n="col_technician">Technicien</span>
     <input type="text" name="technician_name" value="{{ intervention.technician_name if intervention else current_user.username if current_user.role=='tech' else '' }}">
   </label>
+
   <label>
     <span data-i18n="col_status">Statut</span>
     {% set st = intervention.status if intervention else 'open' %}
@@ -35,6 +49,7 @@
       <option value="done" {% if st=='done' %}selected{% endif %}>Clôturé</option>
     </select>
   </label>
+
   <label>
     <span data-i18n="col_priority">Priorité</span>
     {% set pr = intervention.priority if intervention else 'medium' %}
@@ -44,6 +59,7 @@
       <option value="high" {% if pr=='high' %}selected{% endif %}>Haute</option>
     </select>
   </label>
+
   <label>
     <span data-i18n="col_kind">Type</span>
     {% set kd = intervention.kind if intervention else '' %}
@@ -54,6 +70,7 @@
       <option value="installation" {% if kd=='installation' %}selected{% endif %}>Installation</option>
     </select>
   </label>
+
   <label>
     <span data-i18n="col_category">Catégorie</span>
     {% set ct = intervention.category if intervention else '' %}
@@ -65,6 +82,7 @@
       <option value="it" {% if ct=='it' %}selected{% endif %}>IT</option>
     </select>
   </label>
+
   <label>
     <span data-i18n="col_scheduled">Date planifiée (ISO)</span>
     <input type="text" name="scheduled_date" placeholder="2025-01-01T10:00:00" value="{{ intervention.scheduled_date if intervention else '' }}">

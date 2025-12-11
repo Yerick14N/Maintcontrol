@@ -47,7 +47,7 @@
     <tr>
       <th>#</th>
       <th data-i18n="col_title">Titre</th>
-      <th data-i18n="col_client">Client</th>
+      <th data-i18n="col_client">Client chantier</th>
       <th data-i18n="col_technician">Technicien</th>
       <th data-i18n="col_status">Statut</th>
       <th data-i18n="col_priority">Priorité</th>
@@ -62,7 +62,7 @@
     <tr>
       <td>{{ it.id }}</td>
       <td>{{ it.title }}</td>
-      <td>{{ it.client_name }}</td>
+      <td>{{ it.customer_name or it.client_name }}</td>
       <td>{{ it.technician_name }}</td>
       <td>{{ it.status }}</td>
       <td>{{ it.priority }}</td>
@@ -70,8 +70,7 @@
       <td>{{ it.category or "" }}</td>
       <td>{{ it.scheduled_date or "" }}</td>
       <td>
-        <a href="{{ url_for('edit_intervention', intervention_id=it.id) }}" data-i18n="edit">Modifier</a>
-        |
+        <a href="{{ url_for('edit_intervention', intervention_id=it.id) }}" data-i18n="edit">Modifier</a> |
         <a href="{{ url_for('intervention_pdf', intervention_id=it.id) }}" data-i18n="pdf">PDF</a>
       </td>
     </tr>
