@@ -1,0 +1,53 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="dashboard_title">Tableau de bord</h1>
+
+<section class="grid-two">
+  <div class="card">
+    <h2 data-i18n="dashboard_recent_interventions">Interventions récentes</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="col_title">Titre</th>
+          <th data-i18n="col_status">Statut</th>
+          <th data-i18n="col_priority">Priorité</th>
+          <th data-i18n="col_scheduled">Planifié</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in interventions %}
+        <tr>
+          <td>{{ it.id }}</td>
+          <td>{{ it.title }}</td>
+          <td>{{ it.status }}</td>
+          <td>{{ it.priority }}</td>
+          <td>{{ it.scheduled_date or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="dashboard_ai">Assistant IA - Priorisation</h2>
+    <p data-i18n="dashboard_ai_hint">
+      Suggestions automatiques d'interventions prioritaires (CRITICAL / HIGH / NORMAL / LOW).
+    </p>
+    <ul class="ai-list">
+      {% for s in suggestions[:5] %}
+      <li class="ai-item ai-{{ s._ai_label|lower }}">
+        <strong>#{{ s.id }} - {{ s.title }}</strong>
+        <span class="tag">{{ s._ai_label }}</span>
+        <small>{{ s.status }} · {{ s.priority }} · {{ s.scheduled_date or "" }}</small>
+      </li>
+      {% else %}
+      <li data-i18n="dashboard_ai_no_data">Aucune suggestion pour le moment.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}

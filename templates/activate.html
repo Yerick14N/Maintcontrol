@@ -1,0 +1,16 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="activate_title">Activer votre licence</h1>
+<p data-i18n="activate_hint">Entrez la clé fournie par votre administrateur pour activer toutes les fonctionnalités.</p>
+{% if message %}
+  <div class="flash info">{{ message }}</div>
+{% endif %}
+<form method="post" class="form">
+  <label>
+    <span data-i18n="licenses_key">Clé</span>
+    <input type="text" name="key" required>
+  </label>
+  <button type="submit" class="btn primary" data-i18n="activate_btn">Activer</button>
+</form>
+{% endblock %}

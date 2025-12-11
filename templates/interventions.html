@@ -1,0 +1,45 @@
+
+{% extends "base.html" %}
+{% block content %}
+<div class="header-row">
+  <h1 data-i18n="interventions_title">Interventions</h1>
+  <div class="actions">
+    {% if not is_trial_expired or current_user.is_activated or current_user.role == 'admin' %}
+    <a href="{{ url_for('export_csv') }}" class="btn" data-i18n="export_csv">Exporter CSV</a>
+    <a href="{{ url_for('export_pdf') }}" class="btn" data-i18n="export_pdf">Exporter PDF</a>
+    {% endif %}
+    <a href="{{ url_for('new_intervention') }}" class="btn primary" data-i18n="interventions_new">Nouvelle intervention</a>
+  </div>
+</div>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th data-i18n="col_title">Titre</th>
+      <th data-i18n="col_client">Client</th>
+      <th data-i18n="col_technician">Technicien</th>
+      <th data-i18n="col_status">Statut</th>
+      <th data-i18n="col_priority">Priorité</th>
+      <th data-i18n="col_scheduled">Planifié</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in interventions %}
+    <tr>
+      <td>{{ it.id }}</td>
+      <td>{{ it.title }}</td>
+      <td>{{ it.client_name }}</td>
+      <td>{{ it.technician_name }}</td>
+      <td>{{ it.status }}</td>
+      <td>{{ it.priority }}</td>
+      <td>{{ it.scheduled_date or "" }}</td>
+      <td><a href="{{ url_for('edit_intervention', intervention_id=it.id) }}" data-i18n="edit">Modifier</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" data-i18n="no_data">Aucune donnée</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

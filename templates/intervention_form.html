@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>
+  {% if intervention %}
+    <span data-i18n="interventions_edit">Modifier une intervention</span>
+  {% else %}
+    <span data-i18n="interventions_new">Nouvelle intervention</span>
+  {% endif %}
+</h1>
+
+<form method="post" class="form">
+  <label>
+    <span data-i18n="col_title">Titre</span>
+    <input type="text" name="title" required value="{{ intervention.title if intervention else '' }}">
+  </label>
+  <label>
+    <span data-i18n="col_description">Description</span>
+    <textarea name="description">{{ intervention.description if intervention else '' }}</textarea>
+  </label>
+  <label>
+    <span data-i18n="col_client">Client</span>
+    <input type="text" name="client_name" value="{{ intervention.client_name if intervention else current_user.username if current_user.role=='client' else '' }}">
+  </label>
+  <label>
+    <span data-i18n="col_technician">Technicien</span>
+    <input type="text" name="technician_name" value="{{ intervention.technician_name if intervention else current_user.username if current_user.role=='tech' else '' }}">
+  </label>
+  <label>
+    <span data-i18n="col_status">Statut</span>
+    <select name="status">
+      {% set st = intervention.status if intervention else 'open' %}
+      <option value="open" {% if st=='open' %}selected{% endif %}>Ouvert</option>
+      <option value="in_progress" {% if st=='in_progress' %}selected{% endif %}>En cours</option>
+      <option value="done" {% if st=='done' %}selected{% endif %}>Clôturé</option>
+    </select>
+  </label>
+  <label>
+    <span data-i18n="col_priority">Priorité</span>
+    <select name="priority">
+      {% set pr = intervention.priority if intervention else 'medium' %}
+      <option value="low" {% if pr=='low' %}selected{% endif %}>Basse</option>
+      <option value="medium" {% if pr=='medium' %}selected{% endif %}>Moyenne</option>
+      <option value="high" {% if pr=='high' %}selected{% endif %}>Haute</option>
+    </select>
+  </label>
+  <label>
+    <span data-i18n="col_scheduled">Date planifiée (ISO)</span>
+    <input type="text" name="scheduled_date" placeholder="2025-01-01T10:00:00" value="{{ intervention.scheduled_date if intervention else '' }}">
+  </label>
+
+  <button type="submit" class="btn primary" data-i18n="save">Enregistrer</button>
+</form>
+
+{% if intervention %}
+<form method="post" action="{{ url_for('delete_intervention', intervention_id=intervention.id) }}" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cette intervention ?');" style="margin-top:0.75rem;">
+  <button type="submit" class="btn danger" data-i18n="delete">Supprimer</button>
+</form>
+{% endif %}
+{% endblock %}

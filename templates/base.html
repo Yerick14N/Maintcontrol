@@ -1,0 +1,64 @@
+
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <title>MaintControl</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  </head>
+  <body data-lang="{{ lang }}">
+    <header class="topbar">
+      <div class="logo">MaintControl</div>
+      {% if current_user %}
+      <nav class="nav">
+        <a href="{{ url_for('dashboard') }}" data-i18n="nav_dashboard">Tableau de bord</a>
+        <a href="{{ url_for('list_interventions') }}" data-i18n="nav_interventions">Interventions</a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('admin_licenses') }}" data-i18n="nav_licenses">Licences</a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}" data-i18n="nav_logout">Déconnexion</a>
+      </nav>
+      {% endif %}
+      <div class="lang-switcher">
+        {% for l in supported_langs %}
+          <a href="{{ url_for('set_lang', lang_code=l) }}" class="{% if l==lang %}active{% endif %}">
+            {{ l.upper() }}
+          </a>
+        {% endfor %}
+      </div>
+    </header>
+
+    <main class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-container">
+            {% for cat, msg in messages %}
+              <div class="flash {{ cat }}">{{ msg }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% if current_user and trial_days_left is not none and not current_user.is_activated %}
+        <div class="banner">
+          <span data-i18n="trial_banner">Version d'essai - jours restants :</span>
+          {{ trial_days_left }}
+          {% if is_trial_expired %}
+            <strong data-i18n="trial_expired">Période d'essai expirée, activez votre licence.</strong>
+            <a href="{{ url_for('activate') }}" class="btn btn-small" data-i18n="trial_activate">Activer</a>
+          {% else %}
+            <a href="{{ url_for('activate') }}" class="btn btn-small" data-i18n="trial_activate">Activer maintenant</a>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <span>&copy; {{ 2025 }} MaintControl SaaS</span>
+    </footer>
+  </body>
+</html>

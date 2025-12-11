@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="auth-card">
+  <h1 data-i18n="login_title">Connexion à MaintControl</h1>
+  <form method="post">
+    <label>
+      <span data-i18n="login_username">Nom d'utilisateur</span>
+      <input type="text" name="username" required>
+    </label>
+    <label>
+      <span data-i18n="login_password">Mot de passe</span>
+      <input type="password" name="password" required>
+    </label>
+    <button class="btn primary" type="submit" data-i18n="login_submit">Se connecter</button>
+  </form>
+</div>
+{% endblock %}
