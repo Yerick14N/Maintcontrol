@@ -133,5 +133,8 @@
   "email_body": "Message",
   "email_smtp_hint": "Configure SMTP_* and FROM_EMAIL on Render to enable sending.",
   "send": "Send",
-  "clear": "Clear"
+  "clear": "Clear",
+  "role_manager": "Site manager",
+  "role_tech": "Technician",
+  "role_client": "Client"
 }

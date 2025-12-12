@@ -606,6 +606,8 @@ def list_interventions():
 def new_intervention():
     user = get_current_user()
     company = get_current_company(user)
+    if user["role"] not in ("admin","manager"):
+        return "Forbidden", 403
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM customers WHERE company_id = ? ORDER BY name", (company["id"],))
@@ -652,6 +654,8 @@ def new_intervention():
 def edit_intervention(intervention_id):
     user = get_current_user()
     company = get_current_company(user)
+    if user["role"] not in ("admin","manager"):
+        return "Forbidden", 403
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM interventions WHERE id = ? AND company_id = ?", (intervention_id, company["id"]))
@@ -1331,7 +1335,9 @@ def admin_users():
         if action == "create":
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
-            role = request.form.get("role") or "tech"
+            role = (request.form.get("role") or "tech").strip().lower()
+            if role not in ("manager", "tech", "client"):
+                role = "tech"
             start_trial = request.form.get("start_trial") == "on"
             activate_now = request.form.get("activate_now") == "on"
 
