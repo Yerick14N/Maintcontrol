@@ -1,0 +1,76 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="export_advanced_title">Export avancé des interventions</h1>
+<p data-i18n="export_advanced_hint">
+  Choisissez vos filtres puis cliquez sur CSV ou PDF pour générer un rapport.
+</p>
+
+<form method="get" class="form">
+  <div class="grid-two">
+    <div>
+      <label>
+        <span data-i18n="col_client">Client chantier</span>
+        <input type="text" name="client_name">
+      </label>
+      <label>
+        <span data-i18n="col_technician">Technicien</span>
+        <input type="text" name="technician_name">
+      </label>
+      <label>
+        <span data-i18n="col_status">Statut</span>
+        <select name="status">
+          <option value=""></option>
+          <option value="open">Ouvert</option>
+          <option value="in_progress">En cours</option>
+          <option value="done">Clôturé</option>
+        </select>
+      </label>
+      <label>
+        <span data-i18n="col_priority">Priorité</span>
+        <select name="priority">
+        <option value="" data-i18n="all">Tous</option>
+        <option value="critical" data-i18n="prio_critical">Critical</option>
+        <option value="high" data-i18n="prio_high">Haute</option>
+        <option value="medium" data-i18n="prio_medium">Moyenne</option>
+        <option value="low" data-i18n="prio_low">Basse</option>
+      </select>
+      </label>
+    </div>
+    <div>
+      <label>
+        <span data-i18n="col_kind">Type</span>
+        <select name="kind">
+          <option value=""></option>
+          <option value="corrective">Correctif</option>
+          <option value="preventive">Préventif</option>
+          <option value="installation">Installation</option>
+        </select>
+      </label>
+      <label>
+        <span data-i18n="col_category">Catégorie</span>
+        <select name="category">
+          <option value=""></option>
+          <option value="electricity">Électricité</option>
+          <option value="plumbing">Plomberie</option>
+          <option value="hvac">HVAC</option>
+          <option value="it">IT</option>
+        </select>
+      </label>
+      <label>
+        <span>Date de début (created_at ≥)</span>
+        <input type="date" name="date_from" value="{{ (filters.date_from[:10] if filters and filters.date_from else '') }}">
+      </label>
+      <label>
+        <span>Date de fin (created_at ≤)</span>
+        <input type="date" name="date_to" value="{{ (filters.date_to[:10] if filters and filters.date_to else '') }}">
+      </label>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" formaction="{{ url_for('export_csv') }}" class="btn" data-i18n="export_csv">Exporter CSV</button>
+    <button type="submit" formaction="{{ url_for('export_pdf') }}" class="btn" data-i18n="export_pdf">Exporter PDF</button>
+  </div>
+</form>
+{% endblock %}

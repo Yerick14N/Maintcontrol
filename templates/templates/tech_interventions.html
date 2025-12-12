@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="tech_my_work_title">Mes interventions</h1>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th data-i18n="col_title">Titre</th>
+        <th data-i18n="col_status">Statut</th>
+        <th data-i18n="col_priority">Priorité</th>
+        <th data-i18n="col_planned">Planifié</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in interventions %}
+      <tr>
+        <td>{{ it.id }}</td>
+        <td>{{ it.title }}</td>
+        <td>{{ it.status }}</td>
+        <td>{{ it.priority }}</td>
+        <td>{{ it.scheduled_date[:10] if it.scheduled_date else '' }}</td>
+        <td><a class="btn btn-small" href="{{ url_for('tech_intervention_detail', intervention_id=it.id) }}" data-i18n="tech_open">Ouvrir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

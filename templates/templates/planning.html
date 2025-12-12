@@ -1,0 +1,97 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="planning_title">Planning des interventions</h1>
+
+<section class="grid-two">
+  <div class="card">
+    <h2 data-i18n="planning_today">Aujourd'hui</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="col_title">Titre</th>
+          <th data-i18n="col_client">Client</th>
+          <th data-i18n="col_technician">Technicien</th>
+          <th data-i18n="col_status">Statut</th>
+          <th data-i18n="col_scheduled">Planifié</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in today_list %}
+        <tr>
+          <td>{{ it.id }}</td>
+          <td>{{ it.title }}</td>
+          <td>{{ it.client_name }}</td>
+          <td>{{ it.technician_name }}</td>
+          <td>{{ it.status }}</td>
+          <td>{{ it.scheduled_date or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="planning_overdue">En retard</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="col_title">Titre</th>
+          <th data-i18n="col_client">Client</th>
+          <th data-i18n="col_technician">Technicien</th>
+          <th data-i18n="col_status">Statut</th>
+          <th data-i18n="col_scheduled">Planifié</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in overdue %}
+        <tr>
+          <td>{{ it.id }}</td>
+          <td>{{ it.title }}</td>
+          <td>{{ it.client_name }}</td>
+          <td>{{ it.technician_name }}</td>
+          <td>{{ it.status }}</td>
+          <td>{{ it.scheduled_date or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" style="margin-top:1rem;">
+  <h2 data-i18n="planning_upcoming">À venir</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th data-i18n="col_title">Titre</th>
+        <th data-i18n="col_client">Client</th>
+        <th data-i18n="col_technician">Technicien</th>
+        <th data-i18n="col_status">Statut</th>
+        <th data-i18n="col_scheduled">Planifié</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in upcoming %}
+      <tr>
+        <td>{{ it.id }}</td>
+        <td>{{ it.title }}</td>
+        <td>{{ it.client_name }}</td>
+        <td>{{ it.technician_name }}</td>
+        <td>{{ it.status }}</td>
+        <td>{{ it.scheduled_date or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" data-i18n="no_data">Aucune donnée</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

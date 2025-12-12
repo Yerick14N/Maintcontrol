@@ -1,0 +1,85 @@
+
+{% extends "base.html" %}
+{% block body_class %}has-dashboard{% endblock %}
+{% block content %}
+<h1 data-i18n="dashboard_title">Tableau de bord</h1>
+
+<section class="kpi-grid">
+  <div class="kpi-card kpi-total">
+    <span class="kpi-label" data-i18n="kpi_total">Total interventions</span>
+    <span class="kpi-value">{{ total_interventions }}</span>
+  </div>
+  <div class="kpi-card kpi-open">
+    <span class="kpi-label" data-i18n="kpi_open">Ouvertes</span>
+    <span class="kpi-value">{{ open_count }}</span>
+  </div>
+  <div class="kpi-card kpi-inprogress">
+    <span class="kpi-label" data-i18n="kpi_in_progress">En cours</span>
+    <span class="kpi-value">{{ in_progress }}</span>
+  </div>
+  <div class="kpi-card kpi-done">
+    <span class="kpi-label" data-i18n="kpi_done">Clôturées</span>
+    <span class="kpi-value">{{ done_count }}</span>
+  </div>
+  <div class="kpi-card kpi-late">
+    <span class="kpi-label" data-i18n="kpi_late">En retard</span>
+    <span class="kpi-value">{{ late_count }}</span>
+  </div>
+  <div class="kpi-card kpi-mine">
+    <span class="kpi-label" data-i18n="kpi_my_open">Mes interventions ouvertes</span>
+    <span class="kpi-value">{{ my_open }}</span>
+  </div>
+</section>
+
+<section class="grid-two">
+  <div class="card">
+    <h2 data-i18n="dashboard_recent_interventions">Interventions récentes</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="col_title">Titre</th>
+          <th data-i18n="col_client">Client</th>
+          <th data-i18n="col_technician">Technicien</th>
+          <th data-i18n="col_status">Statut</th>
+          <th data-i18n="col_priority">Priorité</th>
+          <th data-i18n="col_scheduled">Planifié</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in interventions %}
+        <tr>
+          <td>{{ it.id }}</td>
+          <td>{{ it.title }}</td>
+          <td>{{ it.client_name }}</td>
+          <td>{{ it.technician_name }}</td>
+          <td>{{ it.status }}</td>
+          <td>{{ it.priority }}</td>
+          <td>{{ it.scheduled_date or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="dashboard_ai">Assistant IA - Priorisation</h2>
+    <p data-i18n="dashboard_ai_hint">
+      Suggestions automatiques d'interventions prioritaires (CRITICAL / HIGH / NORMAL / LOW).
+    </p>
+    <ul class="ai-list">
+      {% for s in suggestions[:5] %}
+      <li class="ai-item ai-{{ s._ai_label|lower }}">
+        <strong>#{{ s.id }} - {{ s.title }}</strong>
+        <span class="tag">{{ s._ai_label }}</span>
+        <small>{{ s.status }} · {{ s.priority }} · {{ s.scheduled_date or "" }}</small>
+      </li>
+      {% else %}
+      <li data-i18n="dashboard_ai_no_data">Aucune suggestion pour le moment.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}

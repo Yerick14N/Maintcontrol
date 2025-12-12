@@ -1,0 +1,23 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="company_title">Paramètres de l'entreprise</h1>
+
+<div class="card">
+  <form method="post" class="form">
+    <label>
+      <span data-i18n="company_name">Nom</span>
+      <input type="text" name="name" value="{{ company.name }}">
+    </label>
+    <label>
+      <span data-i18n="company_domain">Domaine personnalisé</span>
+      <input type="text" name="domain" value="{{ company.domain or '' }}" placeholder="app.mon-domaine.com">
+    </label>
+    <p class="help" data-i18n="company_domain_help">
+      Le domaine personnalisé doit être configuré côté DNS / hébergement. Ici, il est enregistré pour information
+      et pour fonctionner avec une éventuelle configuration multi-entreprises.
+    </p>
+    <button type="submit" class="btn primary" data-i18n="company_save_btn">Enregistrer</button>
+  </form>
+</div>
+{% endblock %}

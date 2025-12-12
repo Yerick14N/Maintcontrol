@@ -1,0 +1,59 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="licenses_title">Gestion des licences</h1>
+
+<section class="grid-two">
+  <div class="card">
+    <h2 data-i18n="licenses_generate">Générer des clés</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="generate">
+      <button type="submit" class="btn primary" data-i18n="licenses_generate_btn">Générer une nouvelle clé</button>
+    </form>
+
+    <h3 data-i18n="licenses_existing">Clés existantes</h3>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="licenses_key">Clé</th>
+          <th data-i18n="licenses_used">Utilisée</th>
+          <th data-i18n="licenses_assigned_to">Attribuée à</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in keys %}
+        <tr>
+          <td>{{ k.id }}</td>
+          <td>{{ k.key }}</td>
+          <td>{{ 'Oui' if k.used else 'Non' }}</td>
+          <td>{{ k.assigned_to or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" data-i18n="no_data">Aucune donnée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="licenses_assign">Assigner une clé</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="assign">
+      <label>
+        <span data-i18n="licenses_key">Clé</span>
+        <input type="text" name="key" required>
+      </label>
+      <label>
+        <span data-i18n="licenses_user">Utilisateur</span>
+        <select name="username" required>
+          {% for u in users if u.role != 'admin' %}
+          <option value="{{ u.username }}">{{ u.username }} ({{ u.role }}) {% if u.is_activated %}- activé{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn primary" data-i18n="licenses_assign_btn">Assigner</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

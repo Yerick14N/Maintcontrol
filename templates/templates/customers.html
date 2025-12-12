@@ -1,0 +1,58 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 data-i18n="customers_title">Clients (base clients de l'entreprise)</h1>
+
+{% if current_user.role == 'admin' %}
+<div class="card" style="margin-bottom:1rem;">
+  <h2 data-i18n="customers_new">Nouveau client</h2>
+  <form method="post" class="form">
+    <label>
+      <span data-i18n="customers_name">Nom</span>
+      <input type="text" name="name" required>
+    </label>
+    <label>
+      <span data-i18n="customers_email">Email</span>
+      <input type="text" name="email">
+    </label>
+    <label>
+      <span data-i18n="customers_phone">Téléphone</span>
+      <input type="text" name="phone">
+    </label>
+    <label>
+      <span data-i18n="customers_address">Adresse</span>
+      <input type="text" name="address">
+    </label>
+    <button type="submit" class="btn primary" data-i18n="customers_create_btn">Créer le client</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2 data-i18n="customers_list">Clients enregistrés</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th data-i18n="customers_name">Nom</th>
+        <th data-i18n="customers_email">Email</th>
+        <th data-i18n="customers_phone">Téléphone</th>
+        <th data-i18n="customers_address">Adresse</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in customers %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td>{{ c.name }}</td>
+        <td>{{ c.email or '' }}</td>
+        <td>{{ c.phone or '' }}</td>
+        <td>{{ c.address or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" data-i18n="no_data">Aucune donnée</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

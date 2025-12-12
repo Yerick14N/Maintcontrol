@@ -1,0 +1,126 @@
+
+{% extends "base.html" %}
+{% block content %}
+<div class="header-row">
+  <h1 data-i18n="interventions_title">Interventions</h1>
+  <div class="actions">
+    {% if not is_trial_expired or current_user.is_activated or current_user.role == 'admin' %}
+    <a href="{{ url_for('export_csv') }}" class="btn" data-i18n="export_csv">Exporter CSV</a>
+    <a href="{{ url_for('export_pdf') }}" class="btn" data-i18n="export_pdf">Exporter PDF</a>
+    <a href="{{ url_for('export_advanced') }}" class="btn btn-small" data-i18n="export_advanced">Export avancé</a>
+    {% endif %}
+    <a href="{{ url_for('new_intervention') }}" class="btn primary" data-i18n="interventions_new">Nouvelle intervention</a>
+  </div>
+</div>
+
+<form method="get" class="filter-bar">
+  <select name="status">
+    <option value="">{{ 'Tous statuts' }}</option>
+    <option value="open" {% if request.args.get('status')=='open' %}selected{% endif %}>Ouvert</option>
+    <option value="in_progress" {% if request.args.get('status')=='in_progress' %}selected{% endif %}>En cours</option>
+    <option value="done" {% if request.args.get('status')=='done' %}selected{% endif %}>Clôturé</option>
+  </select>
+  <select name="priority">
+    <option value="">{{ 'Toutes priorités' }}</option>
+    <option value="critical" {% if request.args.get('priority')=='critical' %}selected{% endif %}>Critical</option>
+    <option value="high" {% if request.args.get('priority')=='high' %}selected{% endif %}>Haute</option>
+    <option value="medium" {% if request.args.get('priority')=='medium' %}selected{% endif %}>Moyenne</option>
+    <option value="low" {% if request.args.get('priority')=='low' %}selected{% endif %}>Basse</option>
+  </select>
+  <select name="kind">
+    <option value="">{{ 'Tous types' }}</option>
+    <option value="corrective" {% if request.args.get('kind')=='corrective' %}selected{% endif %}>Correctif</option>
+    <option value="preventive" {% if request.args.get('kind')=='preventive' %}selected{% endif %}>Préventif</option>
+    <option value="installation" {% if request.args.get('kind')=='installation' %}selected{% endif %}>Installation</option>
+  </select>
+  <select name="category">
+    <option value="">{{ 'Toutes catégories' }}</option>
+    <option value="electricity" {% if request.args.get('category')=='electricity' %}selected{% endif %}>Électricité</option>
+    <option value="plumbing" {% if request.args.get('category')=='plumbing' %}selected{% endif %}>Plomberie</option>
+    <option value="hvac" {% if request.args.get('category')=='hvac' %}selected{% endif %}>HVAC</option>
+    <option value="it" {% if request.args.get('category')=='it' %}selected{% endif %}>IT</option>
+  </select>
+  <button type="submit" class="btn btn-small">Filtrer</button>
+</form>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th data-i18n="col_title">Titre</th>
+      <th data-i18n="col_client">Client chantier</th>
+      <th data-i18n="col_technician">Technicien</th>
+      <th data-i18n="col_status">Statut</th>
+      <th data-i18n="col_priority">Priorité</th>
+      <th data-i18n="col_kind">Type</th>
+      <th data-i18n="col_category">Catégorie</th>
+      <th data-i18n="col_scheduled">Planifié</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in interventions %}
+    <tr>
+      <td>{{ it.id }}</td>
+      <td>{{ it.title }}</td>
+      <td>{{ it.customer_name or it.client_name }}</td>
+      <td>{{ it.technician_name }}</td>
+      <td>{{ it.status }}</td>
+      <td>{{ it.priority }}</td>
+      <td>{{ it.kind or "" }}</td>
+      <td>{{ it.category or "" }}</td>
+      <td>{{ it.scheduled_date or "" }}</td>
+      <td>
+        <a href="{{ url_for('edit_intervention', intervention_id=it.id) }}" data-i18n="edit">Modifier</a> |
+        <a href="{{ url_for('intervention_pdf', intervention_id=it.id) }}" data-i18n="pdf">PDF</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" data-i18n="no_data">Aucune donnée</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if current_user.role in ['admin','manager'] %}
+<div class="card" style="margin-top:1rem;">
+  <h2 data-i18n="email_export_title">Envoyer un export par email</h2>
+  <form method="post" action="{{ url_for('export_email') }}">
+    <div class="grid-two">
+      <label>
+        <span data-i18n="email_to">À (emails, séparés par virgule)</span>
+        <input type="text" name="to_emails" placeholder="ex: chef@entreprise.com, client@entreprise.com">
+      </label>
+      <label>
+        <span data-i18n="email_format">Format</span>
+        <select name="format">
+          <option value="pdf">PDF</option>
+          <option value="csv">CSV</option>
+        </select>
+      </label>
+    </div>
+    <label>
+      <span data-i18n="email_subject">Sujet</span>
+      <input type="text" name="subject" value="Export MaintControl">
+    </label>
+    <label>
+      <span data-i18n="email_body">Message</span>
+      <textarea name="body" rows="3"></textarea>
+    </label>
+
+    {# pass current filters if present in querystring #}
+    <input type="hidden" name="status" value="{{ request.args.get('status','') }}">
+    <input type="hidden" name="priority" value="{{ request.args.get('priority','') }}">
+    <input type="hidden" name="kind" value="{{ request.args.get('kind','') }}">
+    <input type="hidden" name="category" value="{{ request.args.get('category','') }}">
+    <input type="hidden" name="client_name" value="{{ request.args.get('client_name','') }}">
+    <input type="hidden" name="technician_name" value="{{ request.args.get('technician_name','') }}">
+    <input type="hidden" name="date_from" value="{{ request.args.get('date_from','') }}">
+    <input type="hidden" name="date_to" value="{{ request.args.get('date_to','') }}">
+
+    <button class="btn primary" type="submit" data-i18n="send">Envoyer</button>
+  </form>
+  <p style="opacity:0.75; margin-top:0.5rem;" data-i18n="email_smtp_hint">Configure SMTP_* et FROM_EMAIL sur Render pour activer l'envoi.</p>
+</div>
+{% endif %}
+
+{% endblock %}
