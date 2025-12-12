@@ -4,6 +4,7 @@
 <div class="auth-card">
   <h1 data-i18n="login_title">Connexion à MaintControl</h1>
   <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>
       <span data-i18n="login_username">Nom d'utilisateur</span>
       <input type="text" name="username" required>

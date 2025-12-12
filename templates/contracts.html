@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="header-row">
+  <h1>Contrats</h1>
+  <div class="actions">
+    {% if current_user.role in ['admin','owner','manager'] %}
+      <a class="btn primary" href="{{ url_for('new_contract') }}">Nouveau contrat</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Nom</th>
+        <th>Client</th>
+        <th>Période</th>
+        <th>Visites/an</th>
+        <th>Actif</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in contracts %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td>{{ c.name }}</td>
+        <td>{{ c.customer_name }}</td>
+        <td>{{ (c.start_date or '') }} → {{ (c.end_date or '') }}</td>
+        <td>{{ c.visits_per_year }}</td>
+        <td>
+          <span class="badge {% if c.is_active %}badge-ok{% else %}badge-muted{% endif %}">
+            {% if c.is_active %}Oui{% else %}Non{% endif %}
+          </span>
+        </td>
+        <td>
+          {% if current_user.role in ['admin','owner','manager'] %}
+            <a href="{{ url_for('edit_contract', contract_id=c.id) }}">Modifier</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">Aucune donnée</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

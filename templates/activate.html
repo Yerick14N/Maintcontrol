@@ -7,6 +7,7 @@
   <div class="flash info">{{ message }}</div>
 {% endif %}
 <form method="post" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>
     <span data-i18n="licenses_key">Clé</span>
     <input type="text" name="key" required>

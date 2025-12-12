@@ -7,6 +7,7 @@
   <div class="card">
     <h2 data-i18n="licenses_generate">Générer des clés</h2>
     <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="generate">
       <button type="submit" class="btn primary" data-i18n="licenses_generate_btn">Générer une nouvelle clé</button>
     </form>
@@ -39,6 +40,7 @@
   <div class="card">
     <h2 data-i18n="licenses_assign">Assigner une clé</h2>
     <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="assign">
       <label>
         <span data-i18n="licenses_key">Clé</span>

@@ -15,6 +15,7 @@ from reportlab.pdfgen import canvas
 from ai.scheduler import suggest_priorities
 import secrets
 from werkzeug.security import check_password_hash, generate_password_hash
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 
 BASE_DIR = os.path.dirname(__file__)
 DATABASE = os.path.join(BASE_DIR, "maintcontrol.db")
@@ -24,6 +25,54 @@ DEFAULT_LANG = "fr"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "CHANGE_THIS_SECRET_KEY")
+
+# Refuse to run in production with an insecure default secret key
+if app.secret_key == "CHANGE_THIS_SECRET_KEY" and (os.environ.get("ENV", "").lower() in ("prod", "production") or os.environ.get("RENDER") or os.environ.get("FLASK_ENV") == "production"):
+    raise RuntimeError("SECRET_KEY must be set in production")
+
+csrf = CSRFProtect(app)
+
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=generate_csrf)
+
+# ---------- Date helpers ----------
+
+def normalize_iso_bound(value: str, is_end: bool = False):
+    """Normalize a user-provided date/datetime into an ISO string suitable for TEXT comparison.
+
+    The database stores timestamps as `datetime.utcnow().isoformat()` (e.g. 2025-12-12T12:34:56.789123).
+    HTML date inputs often send `YYYY-MM-DD`. For filtering, we expand dates to the start/end of day.
+
+    Returns an ISO-8601 string or None if the value is empty/invalid.
+    """
+    s = (value or "").strip()
+    if not s:
+        return None
+
+    # If the user provided only a date, expand to day bounds.
+    # Examples: "2025-12-12" -> "2025-12-12T00:00:00" or "2025-12-12T23:59:59.999999"
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        try:
+            d = datetime.fromisoformat(s)
+        except Exception:
+            return None
+        if is_end:
+            d = d.replace(hour=23, minute=59, second=59, microsecond=999999)
+        else:
+            d = d.replace(hour=0, minute=0, second=0, microsecond=0)
+        return d.isoformat()
+
+    # Try to parse any ISO-like datetime (accepts "YYYY-MM-DDTHH:MM" etc.)
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:
+        return None
+
+    # If no explicit time was provided (rare here), apply bounds.
+    if is_end:
+        return dt.replace(microsecond=999999).isoformat()
+    return dt.replace(microsecond=0).isoformat()
 
 # ---------- DB helpers ----------
 
@@ -112,6 +161,45 @@ def init_db():
     """)
 
     
+
+
+
+    
+    # Equipments (équipements / actifs chez le client)
+    c.execute("""
+        CREATE TABLE equipments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            customer_id INTEGER,
+            name TEXT NOT NULL,
+            reference TEXT,
+            serial_number TEXT,
+            location TEXT,
+            notes TEXT,
+            next_preventive_date TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(company_id) REFERENCES companies(id),
+            FOREIGN KEY(customer_id) REFERENCES customers(id)
+        )
+    """)
+
+    # Contracts (contrats de maintenance)
+    c.execute("""
+        CREATE TABLE contracts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            customer_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            visits_per_year INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(company_id) REFERENCES companies(id),
+            FOREIGN KEY(customer_id) REFERENCES customers(id)
+        )
+    """)
 
 
 
@@ -263,6 +351,43 @@ def migrate_db():
         )
     """)
 
+
+    # equipments table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS equipments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            customer_id INTEGER,
+            name TEXT NOT NULL,
+            reference TEXT,
+            serial_number TEXT,
+            location TEXT,
+            notes TEXT,
+            next_preventive_date TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(company_id) REFERENCES companies(id),
+            FOREIGN KEY(customer_id) REFERENCES customers(id)
+        )
+    """)
+
+    # contracts table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS contracts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            customer_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            visits_per_year INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(company_id) REFERENCES companies(id),
+            FOREIGN KEY(customer_id) REFERENCES customers(id)
+        )
+    """)
+
     # interventions extra columns
     c.execute("PRAGMA table_info(interventions)")
     cols = {row[1] for row in c.fetchall()}
@@ -276,6 +401,8 @@ def migrate_db():
     add_col("tech_updated_at", "ALTER TABLE interventions ADD COLUMN tech_updated_at TEXT")
     add_col("client_signature_path", "ALTER TABLE interventions ADD COLUMN client_signature_path TEXT")
     add_col("client_signed_at", "ALTER TABLE interventions ADD COLUMN client_signed_at TEXT")
+    add_col("equipment_id", "ALTER TABLE interventions ADD COLUMN equipment_id INTEGER")
+    add_col("contract_id", "ALTER TABLE interventions ADD COLUMN contract_id INTEGER")
 
     conn.commit()
     conn.close()
@@ -373,6 +500,23 @@ def require_login(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return wrapper
+
+
+def require_roles(*roles):
+    """Decorator: restrict route to specific roles."""
+    from functools import wraps
+    def deco(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                return redirect(url_for("login"))
+            if user["role"] not in roles:
+                flash("Accès refusé.", "error")
+                return redirect(url_for("dashboard"))
+            return f(*args, **kwargs)
+        return wrapper
+    return deco
 
 @app.context_processor
 def inject_globals():
@@ -599,6 +743,208 @@ def customers():
     conn.close()
     return render_template("customers.html", customers=customers)
 
+
+# ---------- Équipements ----------
+
+@app.route("/equipments")
+@require_login
+def equipments():
+    user = get_current_user()
+    company = get_current_company(user)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT e.*, cu.name AS customer_name
+        FROM equipments e
+        LEFT JOIN customers cu ON e.customer_id = cu.id
+        WHERE e.company_id = ?
+        ORDER BY e.created_at DESC
+    """, (company["id"],))
+    items = c.fetchall()
+    c.execute("SELECT * FROM customers WHERE company_id=? ORDER BY name", (company["id"],))
+    customers = c.fetchall()
+    conn.close()
+    return render_template("equipments.html", equipments=items, customers=customers)
+
+@app.route("/equipments/new", methods=["GET","POST"])
+@require_login
+@require_roles("admin","owner","manager")
+def new_equipment():
+    user = get_current_user()
+    company = get_current_company(user)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM customers WHERE company_id=? ORDER BY name", (company["id"],))
+    customers = c.fetchall()
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        customer_id = request.form.get("customer_id") or None
+        reference = (request.form.get("reference") or "").strip()
+        serial_number = (request.form.get("serial_number") or "").strip()
+        location = (request.form.get("location") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        next_prev = (request.form.get("next_preventive_date") or "").strip() or None
+        if not name:
+            flash("Le nom de l’équipement est obligatoire.", "error")
+        else:
+            cid = int(customer_id) if customer_id and str(customer_id).isdigit() else None
+            c.execute("""
+                INSERT INTO equipments (company_id, customer_id, name, reference, serial_number, location, notes, next_preventive_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (company["id"], cid, name, reference, serial_number, location, notes, next_prev, datetime.utcnow().isoformat()))
+            conn.commit()
+            conn.close()
+            flash("Équipement créé.", "success")
+            return redirect(url_for("equipments"))
+    conn.close()
+    return render_template("equipment_form.html", equipment=None, customers=customers)
+
+@app.route("/equipments/<int:equipment_id>/edit", methods=["GET","POST"])
+@require_login
+@require_roles("admin","owner","manager")
+def edit_equipment(equipment_id):
+    user = get_current_user()
+    company = get_current_company(user)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM equipments WHERE id=? AND company_id=?", (equipment_id, company["id"]))
+    equipment = c.fetchone()
+    if not equipment:
+        conn.close()
+        return "Not found", 404
+    c.execute("SELECT * FROM customers WHERE company_id=? ORDER BY name", (company["id"],))
+    customers = c.fetchall()
+    if request.method == "POST":
+        action = request.form.get("action","save")
+        if action == "delete":
+            c.execute("DELETE FROM equipments WHERE id=? AND company_id=?", (equipment_id, company["id"]))
+            conn.commit()
+            conn.close()
+            flash("Équipement supprimé.", "success")
+            return redirect(url_for("equipments"))
+        name = (request.form.get("name") or "").strip()
+        customer_id = request.form.get("customer_id") or None
+        reference = (request.form.get("reference") or "").strip()
+        serial_number = (request.form.get("serial_number") or "").strip()
+        location = (request.form.get("location") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        next_prev = (request.form.get("next_preventive_date") or "").strip() or None
+        if not name:
+            flash("Le nom de l’équipement est obligatoire.", "error")
+        else:
+            cid = int(customer_id) if customer_id and str(customer_id).isdigit() else None
+            c.execute("""
+                UPDATE equipments
+                SET customer_id=?, name=?, reference=?, serial_number=?, location=?, notes=?, next_preventive_date=?
+                WHERE id=? AND company_id=?
+            """, (cid, name, reference, serial_number, location, notes, next_prev, equipment_id, company["id"]))
+            conn.commit()
+            conn.close()
+            flash("Équipement mis à jour.", "success")
+            return redirect(url_for("equipments"))
+    conn.close()
+    return render_template("equipment_form.html", equipment=equipment, customers=customers)
+
+# ---------- Contrats ----------
+
+@app.route("/contracts")
+@require_login
+def contracts():
+    user = get_current_user()
+    company = get_current_company(user)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT ct.*, cu.name AS customer_name
+        FROM contracts ct
+        JOIN customers cu ON ct.customer_id = cu.id
+        WHERE ct.company_id = ?
+        ORDER BY ct.created_at DESC
+    """, (company["id"],))
+    items = c.fetchall()
+    c.execute("SELECT * FROM customers WHERE company_id=? ORDER BY name", (company["id"],))
+    customers = c.fetchall()
+    conn.close()
+    return render_template("contracts.html", contracts=items, customers=customers)
+
+@app.route("/contracts/new", methods=["GET","POST"])
+@require_login
+@require_roles("admin","owner","manager")
+def new_contract():
+    user = get_current_user()
+    company = get_current_company(user)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM customers WHERE company_id=? ORDER BY name", (company["id"],))
+    customers = c.fetchall()
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        customer_id = request.form.get("customer_id") or ""
+        start_date = (request.form.get("start_date") or "").strip() or None
+        end_date = (request.form.get("end_date") or "").strip() or None
+        visits = request.form.get("visits_per_year") or "0"
+        is_active = 1 if request.form.get("is_active") == "1" else 0
+        notes = (request.form.get("notes") or "").strip()
+        if not name or not customer_id.isdigit():
+            flash("Nom et client du contrat sont obligatoires.", "error")
+        else:
+            c.execute("""
+                INSERT INTO contracts (company_id, customer_id, name, start_date, end_date, visits_per_year, is_active, notes, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (company["id"], int(customer_id), name, start_date, end_date, int(visits), is_active, notes, datetime.utcnow().isoformat()))
+            conn.commit()
+            conn.close()
+            flash("Contrat créé.", "success")
+            return redirect(url_for("contracts"))
+    conn.close()
+    return render_template("contract_form.html", contract=None, customers=customers)
+
+@app.route("/contracts/<int:contract_id>/edit", methods=["GET","POST"])
+@require_login
+@require_roles("admin","owner","manager")
+def edit_contract(contract_id):
+    user = get_current_user()
+    company = get_current_company(user)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM contracts WHERE id=? AND company_id=?", (contract_id, company["id"]))
+    contract = c.fetchone()
+    if not contract:
+        conn.close()
+        return "Not found", 404
+    c.execute("SELECT * FROM customers WHERE company_id=? ORDER BY name", (company["id"],))
+    customers = c.fetchall()
+    if request.method == "POST":
+        action = request.form.get("action","save")
+        if action == "delete":
+            c.execute("DELETE FROM contracts WHERE id=? AND company_id=?", (contract_id, company["id"]))
+            conn.commit()
+            conn.close()
+            flash("Contrat supprimé.", "success")
+            return redirect(url_for("contracts"))
+        name = (request.form.get("name") or "").strip()
+        customer_id = request.form.get("customer_id") or ""
+        start_date = (request.form.get("start_date") or "").strip() or None
+        end_date = (request.form.get("end_date") or "").strip() or None
+        visits = request.form.get("visits_per_year") or "0"
+        is_active = 1 if request.form.get("is_active") == "1" else 0
+        notes = (request.form.get("notes") or "").strip()
+        if not name or not customer_id.isdigit():
+            flash("Nom et client du contrat sont obligatoires.", "error")
+        else:
+            c.execute("""
+                UPDATE contracts
+                SET customer_id=?, name=?, start_date=?, end_date=?, visits_per_year=?, is_active=?, notes=?
+                WHERE id=? AND company_id=?
+            """, (int(customer_id), name, start_date, end_date, int(visits), is_active, notes, contract_id, company["id"]))
+            conn.commit()
+            conn.close()
+            flash("Contrat mis à jour.", "success")
+            return redirect(url_for("contracts"))
+    conn.close()
+    return render_template("contract_form.html", contract=contract, customers=customers)
+
+
 # ---------- Interventions ----------
 
 @app.route("/interventions")
@@ -611,7 +957,7 @@ def list_interventions():
     conn = get_db()
     c = conn.cursor()
 
-    base_query = "SELECT i.*, cu.name AS customer_name FROM interventions i LEFT JOIN customers cu ON i.customer_id = cu.id WHERE i.company_id = ?"
+    base_query = "SELECT i.*, cu.name AS customer_name, e.name AS equipment_name, ct.name AS contract_name FROM interventions i LEFT JOIN customers cu ON i.customer_id = cu.id LEFT JOIN equipments e ON i.equipment_id = e.id LEFT JOIN contracts ct ON i.contract_id = ct.id WHERE i.company_id = ?"
     params = [company["id"]]
 
     if user["role"] == "tech":
@@ -664,6 +1010,10 @@ def new_intervention():
     customers = c.fetchall()
     c.execute("SELECT id, username, role FROM users WHERE company_id = ? AND role IN ('tech','employee','manager') ORDER BY username", (company["id"],))
     employees = c.fetchall()
+    c.execute("SELECT id, name, customer_id FROM equipments WHERE company_id=? ORDER BY name", (company["id"],))
+    equipments = c.fetchall()
+    c.execute("SELECT id, name, customer_id, is_active FROM contracts WHERE company_id=? ORDER BY created_at DESC", (company["id"],))
+    contracts = c.fetchall()
 
     if request.method == "POST":
         title = request.form.get("title")
@@ -675,6 +1025,8 @@ def new_intervention():
         kind = request.form.get("kind") or ""
         category = request.form.get("category") or ""
         scheduled_date = request.form.get("scheduled_date") or None
+        equipment_id = request.form.get("equipment_id") or None
+        contract_id = request.form.get("contract_id") or None
 
         # multi-assignees
         assignee_ids = request.form.getlist("assignees")
@@ -700,7 +1052,29 @@ def new_intervention():
             else:
                 customer_id = None
 
+
+        # cast optional FK ids
+        try:
+            equipment_id = int(equipment_id) if equipment_id else None
+        except Exception:
+            equipment_id = None
+        try:
+            contract_id = int(contract_id) if contract_id else None
+        except Exception:
+            contract_id = None
+
         # resolve usernames for display/exports (kept for backward compat)
+        # cast optional FK ids
+        try:
+            equipment_id = int(equipment_id) if equipment_id else None
+        except Exception:
+            equipment_id = None
+        try:
+            contract_id = int(contract_id) if contract_id else None
+        except Exception:
+            contract_id = None
+
+
         technician_name = ""
         if assignee_ids_int:
             qmarks = ",".join(["?"] * len(assignee_ids_int))
@@ -711,9 +1085,9 @@ def new_intervention():
 
         c.execute("""
             INSERT INTO interventions
-            (company_id, customer_id, title, description, client_name, technician_name, status, priority, kind, category, scheduled_date, created_at, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (company["id"], customer_id, title, description, client_name, technician_name, status, priority, kind, category, scheduled_date, datetime.utcnow().isoformat(), user["id"]))
+            (company_id, customer_id, equipment_id, contract_id, title, description, client_name, technician_name, status, priority, kind, category, scheduled_date, created_at, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (company["id"], customer_id, equipment_id, contract_id, title, description, client_name, technician_name, status, priority, kind, category, scheduled_date, datetime.utcnow().isoformat(), user["id"]))
 
         intervention_id = c.lastrowid
 
@@ -730,7 +1104,7 @@ def new_intervention():
         return redirect(url_for("list_interventions"))
 
     conn.close()
-    return render_template("intervention_form.html", intervention=None, customers=customers, employees=employees, selected_assignees=[])
+    return render_template("intervention_form.html", intervention=None, customers=customers, employees=employees, equipments=equipments, contracts=contracts, selected_assignees=[])
 
 @app.route("/interventions/<int:intervention_id>/edit", methods=["GET", "POST"])
 @require_login
@@ -753,6 +1127,10 @@ def edit_intervention(intervention_id):
     customers = c.fetchall()
     c.execute("SELECT id, username, role FROM users WHERE company_id = ? AND role IN ('tech','employee','manager') ORDER BY username", (company["id"],))
     employees = c.fetchall()
+    c.execute("SELECT id, name, customer_id FROM equipments WHERE company_id=? ORDER BY name", (company["id"],))
+    equipments = c.fetchall()
+    c.execute("SELECT id, name, customer_id, is_active FROM contracts WHERE company_id=? ORDER BY created_at DESC", (company["id"],))
+    contracts = c.fetchall()
     c.execute("SELECT user_id FROM intervention_assignees WHERE intervention_id = ? AND company_id = ?", (intervention_id, company["id"]))
     selected_assignees = [r["user_id"] for r in c.fetchall()]
 
@@ -776,6 +1154,8 @@ def edit_intervention(intervention_id):
         kind = request.form.get("kind") or ""
         category = request.form.get("category") or ""
         scheduled_date = request.form.get("scheduled_date") or None
+        equipment_id = request.form.get("equipment_id") or None
+        contract_id = request.form.get("contract_id") or None
 
         assignee_ids = request.form.getlist("assignees")
         assignee_ids_int = []
@@ -799,6 +1179,17 @@ def edit_intervention(intervention_id):
             else:
                 customer_id = None
 
+        # cast optional FK ids
+        try:
+            equipment_id = int(equipment_id) if equipment_id else None
+        except Exception:
+            equipment_id = None
+        try:
+            contract_id = int(contract_id) if contract_id else None
+        except Exception:
+            contract_id = None
+
+
         technician_name = ""
         if assignee_ids_int:
             qmarks = ",".join(["?"] * len(assignee_ids_int))
@@ -809,9 +1200,9 @@ def edit_intervention(intervention_id):
 
         c.execute("""
             UPDATE interventions
-            SET customer_id=?, title=?, description=?, client_name=?, technician_name=?, status=?, priority=?, kind=?, category=?, scheduled_date=?
+            SET customer_id=?, equipment_id=?, contract_id=?, title=?, description=?, client_name=?, technician_name=?, status=?, priority=?, kind=?, category=?, scheduled_date=?
             WHERE id=? AND company_id=?
-        """, (customer_id, title, description, client_name, technician_name, status, priority, kind, category, scheduled_date, intervention_id, company["id"]))
+        """, (customer_id, equipment_id, contract_id, title, description, client_name, technician_name, status, priority, kind, category, scheduled_date, intervention_id, company["id"]))
 
         c.execute("DELETE FROM intervention_assignees WHERE intervention_id = ? AND company_id = ?", (intervention_id, company["id"]))
         for uid in assignee_ids_int:
@@ -826,7 +1217,7 @@ def edit_intervention(intervention_id):
         return redirect(url_for("list_interventions"))
 
     conn.close()
-    return render_template("intervention_form.html", intervention=intervention, customers=customers, employees=employees, selected_assignees=selected_assignees)
+    return render_template("intervention_form.html", intervention=intervention, customers=customers, employees=employees, equipments=equipments, contracts=contracts, selected_assignees=selected_assignees)
 
 @app.route("/tech/interventions")
 @require_login
@@ -1078,23 +1469,36 @@ def tech_report_pdf(intervention_id):
 def export_csv():
     user = get_current_user()
     company = get_current_company(user)
-    if user["role"] not in ("admin","owner","manager"):
+
+    # Advanced exports are reserved to internal roles.
+    if user["role"] not in ("admin", "owner", "manager"):
         return "Forbidden", 403
-    if is_trial_expired(user) and not user["is_activated"] and user["role"] != "admin":
+    if is_trial_expired(user) and not user.get("is_activated") and user["role"] != "admin":
         return "Trial expiré - export CSV réservé aux comptes activés.", 403
 
     conn = get_db()
     c = conn.cursor()
 
-    base_query = "SELECT * FROM interventions WHERE company_id = ?"
+    # NOTE:
+    # - Some deployments use `customer_id` (table customers) instead of `client_name`
+    # - Some deployments assign technicians via `intervention_assignees` instead of `technician_name`
+    # To avoid exporting "empty" results, client/technician filters match BOTH models.
+    base_query = """
+        SELECT DISTINCT i.*
+        FROM interventions i
+        LEFT JOIN customers cu
+               ON cu.id = i.customer_id AND cu.company_id = i.company_id
+        WHERE i.company_id = ?
+    """
     params = [company["id"]]
 
+    # Legacy per-role limitation kept for safety (even though internal roles are required above).
     if user["role"] == "tech":
-        base_query += " AND technician_name = ?"
+        base_query += " AND i.technician_name = ?"
         params.append(user["username"])
     elif user["role"] == "client":
-        base_query += " AND client_name = ?"
-        params.append(user["username"])
+        base_query += " AND (i.client_name = ? OR cu.name = ?)"
+        params.extend([user["username"], user["username"]])
 
     status = request.args.get("status", "").strip()
     priority = request.args.get("priority", "").strip()
@@ -1106,68 +1510,98 @@ def export_csv():
     date_to = normalize_iso_bound((request.args.get("date_to") or ""), is_end=True)
 
     if status:
-        base_query += " AND status = ?"
+        base_query += " AND i.status = ?"
         params.append(status)
     if priority:
-        base_query += " AND priority = ?"
+        base_query += " AND i.priority = ?"
         params.append(priority)
     if kind:
-        base_query += " AND kind = ?"
+        base_query += " AND i.kind = ?"
         params.append(kind)
     if category:
-        base_query += " AND category = ?"
+        base_query += " AND i.category = ?"
         params.append(category)
+
     if client:
-        base_query += " AND client_name = ?"
-        params.append(client)
+        base_query += " AND (i.client_name = ? OR cu.name = ?)"
+        params.extend([client, client])
+
     if technician:
-        base_query += " AND technician_name = ?"
-        params.append(technician)
+        # Match either legacy technician_name or the assignees table.
+        base_query += """ AND (
+            i.technician_name = ?
+            OR EXISTS (
+                SELECT 1
+                FROM intervention_assignees ia
+                JOIN users u ON u.id = ia.user_id
+                WHERE ia.intervention_id = i.id
+                  AND ia.company_id = i.company_id
+                  AND u.username = ?
+            )
+        )"""
+        params.extend([technician, technician])
+
     if date_from:
-        base_query += " AND created_at >= ?"
+        base_query += " AND i.created_at >= ?"
         params.append(date_from)
     if date_to:
-        base_query += " AND created_at <= ?"
+        base_query += " AND i.created_at <= ?"
         params.append(date_to)
 
-    base_query += " ORDER BY created_at DESC"
+    base_query += " ORDER BY i.created_at DESC"
     c.execute(base_query, tuple(params))
     rows = c.fetchall()
     conn.close()
 
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
-    writer.writerow([col for col in rows[0].keys()] if rows else [])
-    for row in rows:
-        writer.writerow([row[col] for col in row.keys()])
+
+    if rows:
+        writer.writerow(list(rows[0].keys()))
+        for row in rows:
+            writer.writerow([row[col] for col in row.keys()])
+    else:
+        # Keep a valid CSV even when no rows match (avoid a visually "empty" file).
+        writer.writerow(["Aucun résultat"])
 
     mem = io.BytesIO()
     mem.write(output.getvalue().encode("utf-8-sig"))
     mem.seek(0)
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="interventions.csv")
 
+
 @app.route("/interventions/export/pdf")
 @require_login
 def export_pdf():
     user = get_current_user()
     company = get_current_company(user)
-    if user["role"] not in ("admin","owner","manager"):
+    if user["role"] not in ("admin", "owner", "manager"):
         return "Forbidden", 403
-    if is_trial_expired(user) and not user["is_activated"] and user["role"] != "admin":
+    if is_trial_expired(user) and not user.get("is_activated") and user["role"] != "admin":
         return "Trial expiré - export PDF réservé aux comptes activés.", 403
 
     conn = get_db()
     c = conn.cursor()
 
-    base_query = "SELECT id, title, status, priority, kind, category, scheduled_date, client_name, technician_name FROM interventions WHERE company_id = ?"
+    # See note in export_csv(): support both (client_name vs customer_id) and
+    # (technician_name vs intervention_assignees).
+    base_query = """
+        SELECT
+            i.id,
+            i.title,
+            i.status,
+            i.priority,
+            i.kind,
+            i.category,
+            i.scheduled_date,
+            COALESCE(NULLIF(i.client_name, ''), cu.name, '') AS client_display,
+            i.technician_name
+        FROM interventions i
+        LEFT JOIN customers cu
+               ON cu.id = i.customer_id AND cu.company_id = i.company_id
+        WHERE i.company_id = ?
+    """
     params = [company["id"]]
-
-    if user["role"] == "tech":
-        base_query += " AND technician_name = ?"
-        params.append(user["username"])
-    elif user["role"] == "client":
-        base_query += " AND client_name = ?"
-        params.append(user["username"])
 
     status = request.args.get("status", "").strip()
     priority = request.args.get("priority", "").strip()
@@ -1179,31 +1613,43 @@ def export_pdf():
     date_to = normalize_iso_bound((request.args.get("date_to") or ""), is_end=True)
 
     if status:
-        base_query += " AND status = ?"
+        base_query += " AND i.status = ?"
         params.append(status)
     if priority:
-        base_query += " AND priority = ?"
+        base_query += " AND i.priority = ?"
         params.append(priority)
     if kind:
-        base_query += " AND kind = ?"
+        base_query += " AND i.kind = ?"
         params.append(kind)
     if category:
-        base_query += " AND category = ?"
+        base_query += " AND i.category = ?"
         params.append(category)
     if client:
-        base_query += " AND client_name = ?"
-        params.append(client)
+        base_query += " AND (i.client_name = ? OR cu.name = ?)"
+        params.extend([client, client])
+
     if technician:
-        base_query += " AND technician_name = ?"
-        params.append(technician)
+        base_query += """ AND (
+            i.technician_name = ?
+            OR EXISTS (
+                SELECT 1
+                FROM intervention_assignees ia
+                JOIN users u ON u.id = ia.user_id
+                WHERE ia.intervention_id = i.id
+                  AND ia.company_id = i.company_id
+                  AND u.username = ?
+            )
+        )"""
+        params.extend([technician, technician])
+
     if date_from:
-        base_query += " AND created_at >= ?"
+        base_query += " AND i.created_at >= ?"
         params.append(date_from)
     if date_to:
-        base_query += " AND created_at <= ?"
+        base_query += " AND i.created_at <= ?"
         params.append(date_to)
 
-    base_query += " ORDER BY created_at DESC"
+    base_query += " ORDER BY i.created_at DESC"
     c.execute(base_query, tuple(params))
     rows = c.fetchall()
     conn.close()
@@ -1217,19 +1663,181 @@ def export_pdf():
     y -= 25
     p.setFont("Helvetica", 9)
 
-    for row in rows:
-        line = f"#{row['id']} | {row['title']} | {row['status']} | {row['priority']} | {row['kind'] or ''} | {row['category'] or ''} | {row['client_name'] or ''} | {row['technician_name'] or ''} | {row['scheduled_date'] or ''}"
-        if y < 50:
-            p.showPage()
-            y = height - 50
-            p.setFont("Helvetica", 9)
-        p.drawString(40, y, line[:200])
-        y -= 12
+    if not rows:
+        p.drawString(50, y, "Aucun résultat pour les filtres sélectionnés.")
+        y -= 14
+    else:
+        for row in rows:
+            # If technician_name isn't set, show assignees (first 3) to avoid empty columns.
+            tech_display = (row["technician_name"] or "").strip()
+            if not tech_display:
+                conn2 = get_db()
+                c2 = conn2.cursor()
+                c2.execute(
+                    """
+                    SELECT u.username
+                    FROM intervention_assignees ia
+                    JOIN users u ON u.id = ia.user_id
+                    WHERE ia.intervention_id = ? AND ia.company_id = ?
+                    ORDER BY u.username
+                    LIMIT 3
+                    """,
+                    (row["id"], company["id"]),
+                )
+                names = [r["username"] for r in c2.fetchall()]
+                conn2.close()
+                tech_display = ", ".join(names)
+
+            line = (
+                f"#{row['id']} | {row['title']} | {row['status']} | {row['priority']} | "
+                f"{row['kind'] or ''} | {row['category'] or ''} | {row['client_display'] or ''} | "
+                f"{tech_display or ''} | {row['scheduled_date'] or ''}"
+            )
+            if y < 50:
+                p.showPage()
+                y = height - 50
+                p.setFont("Helvetica", 9)
+            p.drawString(40, y, line[:200])
+            y -= 12
 
     p.showPage()
     p.save()
     mem.seek(0)
     return send_file(mem, mimetype="application/pdf", as_attachment=True, download_name="interventions.pdf")
+
+
+
+@app.route("/interventions/<int:intervention_id>/pdf")
+@require_login
+def intervention_pdf(intervention_id):
+    """Génère un PDF détaillé pour une intervention (lien utilisé dans interventions.html)."""
+    user = get_current_user()
+    company = get_current_company(user)
+
+    # Par cohérence avec l'export PDF global : réservé aux rôles internes.
+    if user["role"] not in ("admin", "owner", "manager", "tech", "employee"):
+        return "Forbidden", 403
+
+    # Si l'essai est expiré et le compte non activé, on bloque comme l'export global.
+    if is_trial_expired(user) and not user.get("is_activated") and user["role"] != "admin":
+        return "Trial expiré - export PDF réservé aux comptes activés.", 403
+
+    conn = get_db()
+    c = conn.cursor()
+
+    # Récupération intervention + infos liées.
+    c.execute(
+        """
+        SELECT i.*,
+               cu.name AS customer_name,
+               e.name  AS equipment_name,
+               ct.name AS contract_name
+        FROM interventions i
+        LEFT JOIN customers  cu ON i.customer_id = cu.id
+        LEFT JOIN equipments e  ON i.equipment_id = e.id
+        LEFT JOIN contracts  ct ON i.contract_id = ct.id
+        WHERE i.id = ? AND i.company_id = ?
+        """,
+        (intervention_id, company["id"]),
+    )
+    it = c.fetchone()
+    if not it:
+        conn.close()
+        flash("Intervention introuvable.", "error")
+        return redirect(url_for("list_interventions"))
+
+    # Si technicien/employé : autoriser seulement si assigné.
+    if user["role"] in ("tech", "employee"):
+        c.execute(
+            "SELECT 1 FROM intervention_assignees WHERE intervention_id=? AND user_id=? AND company_id=?",
+            (intervention_id, user["id"], company["id"]),
+        )
+        if not c.fetchone():
+            conn.close()
+            return "Forbidden", 403
+
+    # Assignees (noms)
+    c.execute(
+        """
+        SELECT u.username
+        FROM intervention_assignees ia
+        JOIN users u ON u.id = ia.user_id
+        WHERE ia.intervention_id = ? AND ia.company_id = ?
+        ORDER BY u.username
+        """,
+        (intervention_id, company["id"]),
+    )
+    assignees = [r["username"] for r in c.fetchall()]
+    conn.close()
+
+    # --- PDF ---
+    mem = io.BytesIO()
+    p = canvas.Canvas(mem, pagesize=letter)
+    width, height = letter
+    y = height - 50
+
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, y, f"Intervention #{it['id']} - {company['name']}")
+    y -= 28
+
+    p.setFont("Helvetica", 11)
+    meta_lines = [
+        ("Titre", it.get("title") or ""),
+        ("Statut", it.get("status") or ""),
+        ("Priorité", it.get("priority") or ""),
+        ("Type", it.get("kind") or ""),
+        ("Catégorie", it.get("category") or ""),
+        ("Client", it.get("client_name") or it.get("customer_name") or ""),
+        ("Technicien(s)", ", ".join(assignees) or (it.get("technician_name") or "")),
+        ("Équipement", it.get("equipment_name") or ""),
+        ("Contrat", it.get("contract_name") or ""),
+        ("Planifiée", it.get("scheduled_date") or ""),
+        ("Créée", it.get("created_at") or ""),
+    ]
+
+    for label, value in meta_lines:
+        if y < 80:
+            p.showPage()
+            y = height - 50
+            p.setFont("Helvetica", 11)
+        p.drawString(50, y, f"{label} : {value}")
+        y -= 16
+
+    y -= 8
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(50, y, "Description")
+    y -= 18
+    p.setFont("Helvetica", 10)
+
+    desc = (it.get("description") or "").strip()
+    if not desc:
+        desc = "(Aucune description)"
+
+    # Wrap simple
+    max_chars = 105
+    for para in desc.splitlines() or [desc]:
+        text = para.strip() or ""
+        if not text:
+            y -= 10
+            continue
+        while text:
+            if y < 60:
+                p.showPage()
+                y = height - 50
+                p.setFont("Helvetica", 10)
+            p.drawString(50, y, text[:max_chars])
+            text = text[max_chars:]
+            y -= 12
+
+    p.showPage()
+    p.save()
+    mem.seek(0)
+    return send_file(
+        mem,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"intervention_{it['id']}.pdf",
+    )
 
 
 @app.route("/interventions/export/email", methods=["POST"])
@@ -1247,7 +1855,7 @@ def export_email():
 
     if not to_emails:
         flash("Email destinataire manquant.", "error")
-        return redirect(url_for("interventions"))
+        return redirect(url_for("list_interventions"))
 
     # Build same query as exports
     conn = get_db()
@@ -1326,7 +1934,7 @@ def export_email():
     except Exception as e:
         flash(f"Erreur email: {e}", "error")
 
-    return redirect(url_for("interventions"))
+    return redirect(url_for("list_interventions"))
 
 
 @app.route("/interventions/export/advanced")

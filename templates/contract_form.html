@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{% if contract %}Modifier un contrat{% else %}Nouveau contrat{% endif %}</h1>
+
+<form method="post" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label>
+    <span>Nom *</span>
+    <input type="text" name="name" required value="{{ contract.name if contract else '' }}">
+  </label>
+
+  <label>
+    <span>Client *</span>
+    {% set cid = contract.customer_id if contract else '' %}
+    <select name="customer_id" required>
+      <option value=""></option>
+      {% for c in customers %}
+        <option value="{{ c.id }}" {% if cid==c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <div class="grid-two">
+    <label>
+      <span>Date début</span>
+      <input type="date" name="start_date" value="{{ (contract.start_date[:10] if contract and contract.start_date else '') }}">
+    </label>
+    <label>
+      <span>Date fin</span>
+      <input type="date" name="end_date" value="{{ (contract.end_date[:10] if contract and contract.end_date else '') }}">
+    </label>
+  </div>
+
+  <div class="grid-two">
+    <label>
+      <span>Visites préventives / an</span>
+      <input type="number" min="0" name="visits_per_year" value="{{ contract.visits_per_year if contract else 0 }}">
+    </label>
+    <label>
+      <span>Actif</span>
+      {% set active = (contract.is_active if contract else 1) %}
+      <select name="is_active">
+        <option value="1" {% if active %}selected{% endif %}>Oui</option>
+        <option value="0" {% if not active %}selected{% endif %}>Non</option>
+      </select>
+    </label>
+  </div>
+
+  <label>
+    <span>Notes</span>
+    <textarea name="notes" rows="3">{{ contract.notes if contract else '' }}</textarea>
+  </label>
+
+  <div class="form-actions">
+    <button class="btn primary" type="submit" name="action" value="save">Enregistrer</button>
+    {% if contract %}
+      <button class="btn danger" type="submit" name="action" value="delete" onclick="return confirm('Confirmer la suppression ?');">Supprimer</button>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

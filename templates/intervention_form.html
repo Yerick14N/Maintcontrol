@@ -10,16 +10,11 @@
 </h1>
 
 <form method="post" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>
     <span data-i18n="col_title">Titre</span>
     <input type="text" name="title" required value="{{ intervention.title if intervention else '' }}">
-  </label>
-  <label>
-    <span data-i18n="col_description">Description</span>
-    <textarea name="description">{{ intervention.description if intervention else '' }}</textarea>
-  </label>
-
-  <label>
+  </label>  <label>
     <span data-i18n="customer_select">Client (base clients)</span>
     {% set cid = intervention.customer_id if intervention else '' %}
     <select name="customer_id">
@@ -35,15 +30,50 @@
     <input type="text" name="client_name" value="{{ intervention.client_name if intervention else '' }}">
   </label>
 
+  <div class="grid-two">
+    <label>
+      <span>Équipement (optionnel)</span>
+      {% set eid = intervention.equipment_id if intervention else '' %}
+      <select name="equipment_id">
+        <option value=""></option>
+        {% for e in equipments %}
+          <option value="{{ e.id }}" {% if eid==e.id %}selected{% endif %}>{{ e.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Contrat (optionnel)</span>
+      {% set coid = intervention.contract_id if intervention else '' %}
+      <select name="contract_id">
+        <option value=""></option>
+        {% for c in contracts %}
+          <option value="{{ c.id }}" {% if coid==c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+
   <label>
-  <span>Salariés affectés</span>
-  <select name="assignees" multiple size="6">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+    <strong>Salariés affectés</strong>
+    <button class="btn btn-small" type="button" data-assign-me="{{ current_user.id }}">M’assigner</button>
+  </div>
+  <select id="assignees" name="assignees" multiple size="6">
     {% for e in employees %}
       <option value="{{ e.id }}" {% if e.id in selected_assignees %}selected{% endif %}>{{ e.username }}{% if e.role %} ({{ e.role }}){% endif %}</option>
     {% endfor %}
   </select>
   <small>Astuce : Ctrl/Cmd pour sélectionner plusieurs.</small>
 </label>
+
+
+  <details>
+    <summary class="help">Champs avancés (statut, priorité, description…)</summary>
+    <div style="margin-top:0.75rem;">
+      <label>
+        <span data-i18n="col_description">Description</span>
+        <textarea name="description">{{ intervention.description if intervention else '' }}</textarea>
+      </label>
 
   <label>
     <span data-i18n="col_status">Statut</span>
@@ -89,8 +119,11 @@
     </select>
   </label>
 
+    </div>
+  </details>
+
   <label>
-    <span data-i18n="col_scheduled">Date planifiée (ISO)</span>
+    <span data-i18n="col_scheduled">Date planifiée</span>
     <input type="date" name="scheduled_date" value="{{ (intervention.scheduled_date[:10] if intervention and intervention.scheduled_date else '') }}">
   </label>
 

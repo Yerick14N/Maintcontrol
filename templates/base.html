@@ -18,6 +18,8 @@
         <a href="{{ url_for('planning') }}" data-i18n="nav_planning">Planning</a>
         {% if current_user and current_user.role in ['tech','employee'] %}<a href="{{ url_for('tech_interventions') }}" data-i18n="nav_my_work">Mes interventions</a>{% endif %}
         <a href="{{ url_for('customers') }}" data-i18n="nav_customers">Clients</a>
+        <a href="{{ url_for('equipments') }}">Équipements</a>
+        <a href="{{ url_for('contracts') }}">Contrats</a>
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('billing') }}" data-i18n="nav_billing">Facturation</a>
         <a href="{{ url_for('company_settings') }}" data-i18n="nav_company">Entreprise</a>

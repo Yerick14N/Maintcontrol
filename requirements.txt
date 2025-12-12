@@ -2,3 +2,4 @@ flask
 reportlab
 werkzeug
 gunicorn
+flask-wtf

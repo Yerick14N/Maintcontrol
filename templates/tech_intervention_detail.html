@@ -20,6 +20,7 @@
   <section class="card">
     <h2 data-i18n="tech_update">Mise à jour</h2>
     <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>
         <span data-i18n="col_status">Statut</span>
         <select name="status">
@@ -48,6 +49,7 @@
   <section class="card">
     <h2 data-i18n="tech_proofs">Preuves</h2>
     <form method="post" action="{{ url_for('tech_upload_proof', intervention_id=intervention.id) }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="file" name="file" accept="image/*,application/pdf">
       <button class="btn btn-small primary" type="submit" data-i18n="tech_add_proof">Ajouter</button>
     </form>
@@ -74,6 +76,7 @@
     <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
       <button class="btn btn-small" type="button" id="sigClear" data-i18n="clear">Effacer</button>
       <form method="post" action="{{ url_for('tech_save_signature', intervention_id=intervention.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="signature_data" id="sigData">
         <button class="btn btn-small primary" type="submit" id="sigSave" data-i18n="save">Enregistrer</button>
       </form>

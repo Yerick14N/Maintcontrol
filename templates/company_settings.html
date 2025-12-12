@@ -5,6 +5,7 @@
 
 <div class="card">
   <form method="post" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>
       <span data-i18n="company_name">Nom</span>
       <input type="text" name="name" value="{{ company.name }}">

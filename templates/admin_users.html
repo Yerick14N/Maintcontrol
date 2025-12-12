@@ -7,6 +7,7 @@
   <div class="card">
     <h2 data-i18n="users_create">Créer un nouvel utilisateur</h2>
     <form method="post" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="create">
       <label>
         <span data-i18n="users_username">Nom d'utilisateur</span>
@@ -83,6 +84,7 @@
           <td>
             {% if current_user.role == 'admin' and u.role != 'admin' %}
             <form method="post" style="display:inline" onsubmit="return confirm('Confirmer la suppression de cet utilisateur ?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="user_id" value="{{ u.id }}">
               <button type="submit" class="btn danger btn-small" data-i18n="users_delete">Supprimer</button>

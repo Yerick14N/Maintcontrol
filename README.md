@@ -22,7 +22,13 @@ python app.py
 ```
 
 Accès par défaut :
-- admin / admin (entreprise DemoCompany)
+
+Les identifiants **admin/admin** ont été supprimés (trop faibles).
+
+- Les nouveaux identifiants admin (générés) sont dans : `NEW_ADMIN_CREDENTIALS.txt`
+- En production, il est recommandé de **surcharger** ces identifiants via les variables d’environnement :
+  - `ADMIN_USERNAME`
+  - `ADMIN_PASSWORD` (minimum 12 caractères)
 
 ## Déploiement sur Render
 

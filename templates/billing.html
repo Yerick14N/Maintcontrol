@@ -16,6 +16,7 @@
     </p>
     <h3 data-i18n="billing_create_invoice">Créer une facture</h3>
     <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="create_invoice">
       <label>
         <span data-i18n="billing_amount">Montant (EUR)</span>
@@ -53,6 +54,7 @@
           <td>
             {% if inv.status != 'paid' %}
             <form method="post" style="display:inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="pay_invoice">
               <input type="hidden" name="invoice_id" value="{{ inv.id }}">
               <button type="submit" class="btn btn-small" data-i18n="billing_pay_simulate">Simuler paiement</button>

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{% if equipment %}Modifier un équipement{% else %}Nouvel équipement{% endif %}</h1>
+
+<form method="post" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label>
+    <span>Nom *</span>
+    <input type="text" name="name" required value="{{ equipment.name if equipment else '' }}">
+  </label>
+
+  <label>
+    <span>Client</span>
+    {% set cid = equipment.customer_id if equipment else '' %}
+    <select name="customer_id">
+      <option value=""></option>
+      {% for c in customers %}
+        <option value="{{ c.id }}" {% if cid==c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <details>
+    <summary class="help">Détails (optionnel)</summary>
+    <div style="margin-top:0.75rem;">
+      <label>
+        <span>Référence</span>
+        <input type="text" name="reference" value="{{ equipment.reference if equipment else '' }}">
+      </label>
+      <label>
+        <span>N° série</span>
+        <input type="text" name="serial_number" value="{{ equipment.serial_number if equipment else '' }}">
+      </label>
+      <label>
+        <span>Localisation / Site</span>
+        <input type="text" name="location" value="{{ equipment.location if equipment else '' }}">
+      </label>
+      <label>
+        <span>Prochain préventif</span>
+        <input type="date" name="next_preventive_date" value="{{ (equipment.next_preventive_date[:10] if equipment and equipment.next_preventive_date else '') }}">
+      </label>
+      <label>
+        <span>Notes</span>
+        <textarea name="notes" rows="3">{{ equipment.notes if equipment else '' }}</textarea>
+      </label>
+    </div>
+  </details>
+
+  <div class="form-actions">
+    <button class="btn primary" type="submit" name="action" value="save">Enregistrer</button>
+    {% if equipment %}
+      <button class="btn danger" type="submit" name="action" value="delete" onclick="return confirm('Confirmer la suppression ?');">Supprimer</button>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

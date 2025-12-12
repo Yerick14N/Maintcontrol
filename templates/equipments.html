@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="header-row">
+  <h1>Équipements</h1>
+  <div class="actions">
+    {% if current_user.role in ['admin','owner','manager'] %}
+      <a class="btn primary" href="{{ url_for('new_equipment') }}">Nouvel équipement</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Nom</th>
+        <th>Client</th>
+        <th>Référence</th>
+        <th>N° série</th>
+        <th>Localisation</th>
+        <th>Prochain préventif</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in equipments %}
+      <tr>
+        <td>{{ e.id }}</td>
+        <td>{{ e.name }}</td>
+        <td>{{ e.customer_name or '' }}</td>
+        <td>{{ e.reference or '' }}</td>
+        <td>{{ e.serial_number or '' }}</td>
+        <td>{{ e.location or '' }}</td>
+        <td>{{ e.next_preventive_date or '' }}</td>
+        <td>
+          {% if current_user.role in ['admin','owner','manager'] %}
+            <a href="{{ url_for('edit_equipment', equipment_id=e.id) }}">Modifier</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">Aucune donnée</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
