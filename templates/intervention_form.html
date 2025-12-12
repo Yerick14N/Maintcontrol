@@ -36,9 +36,14 @@
   </label>
 
   <label>
-    <span data-i18n="col_technician">Technicien</span>
-    <input type="text" name="technician_name" value="{{ intervention.technician_name if intervention else current_user.username if current_user.role=='tech' else '' }}">
-  </label>
+  <span>Salariés affectés</span>
+  <select name="assignees" multiple size="6">
+    {% for e in employees %}
+      <option value="{{ e.id }}" {% if e.id in selected_assignees %}selected{% endif %}>{{ e.username }}{% if e.role %} ({{ e.role }}){% endif %}</option>
+    {% endfor %}
+  </select>
+  <small>Astuce : Ctrl/Cmd pour sélectionner plusieurs.</small>
+</label>
 
   <label>
     <span data-i18n="col_status">Statut</span>

@@ -17,13 +17,24 @@
         <input type="password" name="password" required>
       </label>
       <label>
-        <span data-i18n="users_role">Rôle</span>
-        <select name="role">
-          <option value="manager" selected data-i18n="role_manager">Chef de chantier</option>
-          <option value="tech" data-i18n="role_tech">Technicien</option>
-          <option value="client" data-i18n="role_client">Client</option>
-        </select>
-      </label>
+  <span data-i18n="users_role">Rôle</span>
+  {% if current_user.role == 'owner' %}
+    <select name="role">
+      <option value="manager" selected data-i18n="role_manager">Chef de chantier</option>
+      <option value="employee">Salarié</option>
+      <option value="tech" data-i18n="role_tech">Technicien</option>
+      <option value="client" data-i18n="role_client">Client</option>
+    </select>
+    <small style="opacity:.8">Le patron ne peut pas créer d'admin, ni modifier les rôles existants.</small>
+  {% else %}
+    <select name="role">
+      <option value="manager" selected data-i18n="role_manager">Chef de chantier</option>
+      <option value="employee">Salarié</option>
+      <option value="tech" data-i18n="role_tech">Technicien</option>
+      <option value="client" data-i18n="role_client">Client</option>
+    </select>
+  {% endif %}
+</label>
       <label class="checkbox-row">
         <input type="checkbox" name="start_trial" checked>
         <span data-i18n="users_start_trial">Démarrer une période d'essai de 30 jours</span>
@@ -63,7 +74,7 @@
           <td>{{ 'Oui' if u.is_activated else 'Non' }}</td>
           <td>{{ u.license_key or '-' }}</td>
           <td>
-            {% if u.role != 'admin' %}
+            {% if current_user.role == 'admin' and u.role != 'admin' %}
             <form method="post" style="display:inline" onsubmit="return confirm('Confirmer la suppression de cet utilisateur ?');">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="user_id" value="{{ u.id }}">

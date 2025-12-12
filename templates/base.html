@@ -16,12 +16,14 @@
         <a href="{{ url_for('dashboard') }}" data-i18n="nav_dashboard">Tableau de bord</a>
         <a href="{{ url_for('list_interventions') }}" data-i18n="nav_interventions">Interventions</a>
         <a href="{{ url_for('planning') }}" data-i18n="nav_planning">Planning</a>
-        {% if current_user and current_user.role == 'tech' %}<a href="{{ url_for('tech_interventions') }}" data-i18n="nav_my_work">Mes interventions</a>{% endif %}
+        {% if current_user and current_user.role in ['tech','employee'] %}<a href="{{ url_for('tech_interventions') }}" data-i18n="nav_my_work">Mes interventions</a>{% endif %}
         <a href="{{ url_for('customers') }}" data-i18n="nav_customers">Clients</a>
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('billing') }}" data-i18n="nav_billing">Facturation</a>
         <a href="{{ url_for('company_settings') }}" data-i18n="nav_company">Entreprise</a>
         <a href="{{ url_for('admin_licenses') }}" data-i18n="nav_licenses">Licences</a>
+                {% endif %}
+        {% if current_user.role in ['admin','owner'] %}
         <a href="{{ url_for('admin_users') }}" data-i18n="nav_users">Utilisateurs</a>
         {% endif %}
         <a href="{{ url_for('logout') }}" data-i18n="nav_logout">Déconnexion</a>
