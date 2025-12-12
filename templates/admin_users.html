@@ -20,16 +20,23 @@
   <span data-i18n="users_role">Rôle</span>
   {% if current_user.role == 'owner' %}
     <select name="role">
+      {# Only the company admin can create a Patron/Owner account #}
+      {% if current_role == 'admin' %}
+        <option value="owner" data-i18n="role_owner">Patron</option>
+      {% endif %}
       <option value="manager" selected data-i18n="role_manager">Chef de chantier</option>
-      <option value="employee">Salarié</option>
+      <option value="employee" data-i18n="role_employee">Salarié</option>
       <option value="tech" data-i18n="role_tech">Technicien</option>
       <option value="client" data-i18n="role_client">Client</option>
     </select>
     <small style="opacity:.8">Le patron ne peut pas créer d'admin, ni modifier les rôles existants.</small>
   {% else %}
     <select name="role">
+      {% if current_role == 'admin' %}
+        <option value="owner" data-i18n="role_owner">Patron</option>
+      {% endif %}
       <option value="manager" selected data-i18n="role_manager">Chef de chantier</option>
-      <option value="employee">Salarié</option>
+      <option value="employee" data-i18n="role_employee">Salarié</option>
       <option value="tech" data-i18n="role_tech">Technicien</option>
       <option value="client" data-i18n="role_client">Client</option>
     </select>

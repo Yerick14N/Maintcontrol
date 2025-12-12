@@ -1450,11 +1450,18 @@ def admin_users():
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
             role = (request.form.get("role") or "tech").strip().lower()
-            # Owner (patron) can create users, but cannot grant admin rights
-            allowed_roles = ("manager", "tech", "employee", "client")
+            # Role rules:
+            # - admin (entreprise) can create: owner/patron, manager, tech, employee, client
+            # - owner/patron can create: manager, tech, employee, client (but NOT admin and NOT owner)
+            allowed_roles_admin = ("owner", "manager", "tech", "employee", "client")
+            allowed_roles_owner = ("manager", "tech", "employee", "client")
+
+            if admin["role"] == "admin":
+                allowed_roles = allowed_roles_admin
+            else:
+                allowed_roles = allowed_roles_owner
+
             if role not in allowed_roles:
-                role = "tech"
-            if admin["role"] == "owner" and role == "admin":
                 role = "tech"
             start_trial = request.form.get("start_trial") == "on"
             activate_now = request.form.get("activate_now") == "on"
@@ -1523,7 +1530,8 @@ def admin_users():
     """, (company["id"],))
     users = c.fetchall()
     conn.close()
-    return render_template("admin_users.html", users=users)
+    # Pass current user's role so the template can show/hide sensitive role options (e.g., owner/patron)
+    return render_template("admin_users.html", users=users, current_role=admin["role"])
 
 @app.route("/activate", methods=["GET", "POST"])
 @require_login
