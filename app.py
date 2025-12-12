@@ -2,9 +2,14 @@
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, jsonify, flash
 from datetime import datetime, timedelta
 import sqlite3
+import re
 import os
 import csv
 import io
+import base64
+import smtplib
+import ssl
+from email.message import EmailMessage
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from ai.scheduler import suggest_priorities
@@ -91,6 +96,13 @@ def init_db():
             kind TEXT,
             category TEXT,
             scheduled_date TEXT,
+            tech_notes TEXT,
+            time_spent_minutes INTEGER DEFAULT 0,
+            started_at TEXT,
+            completed_at TEXT,
+            tech_updated_at TEXT,
+            client_signature_path TEXT,
+            client_signed_at TEXT,
             created_at TEXT NOT NULL,
             created_by INTEGER,
             FOREIGN KEY(company_id) REFERENCES companies(id),
@@ -99,7 +111,9 @@ def init_db():
         )
     """)
 
-    # License keys (par entreprise)
+    
+
+# License keys (par entreprise)
     c.execute("""
         CREATE TABLE license_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,8 +195,96 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+def migrate_db():
+    """Add new columns/tables safely when upgrading."""
+    conn = get_db()
+    c = conn.cursor()
+
+    # intervention_files table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS intervention_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intervention_id INTEGER NOT NULL,
+            company_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            uploaded_by INTEGER,
+            uploaded_at TEXT NOT NULL,
+            FOREIGN KEY(intervention_id) REFERENCES interventions(id),
+            FOREIGN KEY(company_id) REFERENCES companies(id),
+            FOREIGN KEY(uploaded_by) REFERENCES users(id)
+        )
+    """)
+
+    # login_attempts table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            ip TEXT,
+            fail_count INTEGER DEFAULT 0,
+            last_fail_at TEXT,
+            locked_until TEXT
+        )
+    """)
+
+    # interventions extra columns
+    c.execute("PRAGMA table_info(interventions)")
+    cols = {row[1] for row in c.fetchall()}
+    def add_col(name, ddl):
+        if name not in cols:
+            c.execute(ddl)
+    add_col("tech_notes", "ALTER TABLE interventions ADD COLUMN tech_notes TEXT")
+    add_col("time_spent_minutes", "ALTER TABLE interventions ADD COLUMN time_spent_minutes INTEGER DEFAULT 0")
+    add_col("started_at", "ALTER TABLE interventions ADD COLUMN started_at TEXT")
+    add_col("completed_at", "ALTER TABLE interventions ADD COLUMN completed_at TEXT")
+    add_col("tech_updated_at", "ALTER TABLE interventions ADD COLUMN tech_updated_at TEXT")
+    add_col("client_signature_path", "ALTER TABLE interventions ADD COLUMN client_signature_path TEXT")
+    add_col("client_signed_at", "ALTER TABLE interventions ADD COLUMN client_signed_at TEXT")
+
+    conn.commit()
+    conn.close()
+
+
+def ensure_admin_credentials():
+    """Use ADMIN_USERNAME / ADMIN_PASSWORD env vars to secure admin login."""
+    admin_user = os.environ.get("ADMIN_USERNAME", "").strip()
+    admin_pass = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if not admin_user and not admin_pass:
+        return
+    if admin_pass and len(admin_pass) < 12:
+        print("[MaintControl] ADMIN_PASSWORD too short (min 12). Ignored.")
+        return
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1")
+    u = c.fetchone()
+    if not u:
+        username = admin_user or "admin"
+        pw = admin_pass or secrets.token_urlsafe(24)
+        now = datetime.utcnow().isoformat()
+        # create default company if needed
+        c.execute("SELECT id FROM companies ORDER BY id LIMIT 1")
+        row = c.fetchone()
+        company_id = row["id"] if row else 1
+        c.execute("""
+            INSERT INTO users (username, password, role, company_id, created_at, trial_start, is_activated)
+            VALUES (?, ?, 'admin', ?, ?, ?, 1)
+        """, (username, generate_password_hash(pw), company_id, now, now))
+    else:
+        username = admin_user or u["username"]
+        pw_hash = generate_password_hash(admin_pass) if admin_pass else u["password"]
+        c.execute("UPDATE users SET username=?, password=? WHERE id=?", (username, pw_hash, u["id"]))
+    conn.commit()
+    conn.close()
+
+
 # Init DB at import (Flask 3 compatible)
 init_db()
+migrate_db()
+ensure_admin_credentials()
 
 # ---------- helpers ----------
 
@@ -222,33 +324,12 @@ def is_trial_expired(user):
     start = datetime.fromisoformat(trial_start)
     return datetime.utcnow() > start + timedelta(days=TRIAL_DAYS)
 
-
 def remaining_trial_days(user):
     if user is None or user["role"] == "admin" or user["is_activated"] or not user["trial_start"]:
         return None
     start = datetime.fromisoformat(user["trial_start"])
     remaining = (start + timedelta(days=TRIAL_DAYS) - datetime.utcnow()).days
     return max(0, remaining)
-
-def parse_planning_date(value):
-    """Parse various simple date formats for planning (ISO, YYYY-MM-DD, DD/MM/YYYY...)."""
-    if not value:
-        return None
-    s = value.strip()
-    if not s:
-        return None
-    # Try full ISO (with or without time)
-    try:
-        return datetime.fromisoformat(s)
-    except Exception:
-        pass
-    # Try a few common simple formats
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
-        try:
-            return datetime.strptime(s, fmt)
-        except Exception:
-            continue
-    return None
 
 def require_login(f):
     from functools import wraps
@@ -287,22 +368,65 @@ def set_lang(lang_code):
     session["lang"] = lang_code
     return redirect(request.referrer or url_for("dashboard"))
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+        now = datetime.utcnow()
+
         conn = get_db()
         c = conn.cursor()
+
+        # Lockout check
+        c.execute("SELECT * FROM login_attempts WHERE username=? AND ip=? ORDER BY id DESC LIMIT 1", (username, ip))
+        la = c.fetchone()
+        if la and la["locked_until"]:
+            try:
+                until = datetime.fromisoformat(la["locked_until"])
+                if until > now:
+                    conn.close()
+                    flash("Trop de tentatives. Réessayez plus tard.", "error")
+                    return render_template("login.html")
+            except Exception:
+                pass
+
         c.execute("SELECT * FROM users WHERE username = ?", (username,))
         user = c.fetchone()
-        conn.close()
-        if user and check_password_hash(user["password"], password):
+
+        ok = bool(user and check_password_hash(user["password"], password))
+        if ok:
+            c.execute("INSERT INTO login_attempts (username, ip, fail_count, last_fail_at, locked_until) VALUES (?, ?, 0, ?, NULL)",
+                      (username, ip, now.isoformat()))
+            conn.commit()
+            conn.close()
             session["user_id"] = user["id"]
             return redirect(url_for("dashboard"))
-        else:
-            flash("Identifiants invalides", "error")
+
+        # failure update
+        fail_count = 1
+        if la and la["fail_count"] is not None and la["last_fail_at"]:
+            try:
+                last = datetime.fromisoformat(la["last_fail_at"])
+                if (now - last).total_seconds() <= 600:
+                    fail_count = int(la["fail_count"]) + 1
+            except Exception:
+                pass
+
+        locked_until = None
+        if fail_count >= 5:
+            locked_until = (now + timedelta(minutes=15)).isoformat()
+
+        c.execute("INSERT INTO login_attempts (username, ip, fail_count, last_fail_at, locked_until) VALUES (?, ?, ?, ?, ?)",
+                  (username, ip, fail_count, now.isoformat(), locked_until))
+        conn.commit()
+        conn.close()
+        flash("Identifiants invalides", "error")
+
     return render_template("login.html")
+
 
 @app.route("/logout")
 def logout():
@@ -433,6 +557,8 @@ def customers():
 def list_interventions():
     user = get_current_user()
     company = get_current_company(user)
+    if user["role"] == "tech":
+        return redirect(url_for("tech_interventions"))
     conn = get_db()
     c = conn.cursor()
 
@@ -581,6 +707,262 @@ def edit_intervention(intervention_id):
     conn.close()
     return render_template("intervention_form.html", intervention=intervention, customers=customers)
 
+
+# ---------- Technician mode ----------
+def _uploads_dir():
+    d = os.path.join(BASE_DIR, "uploads")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+@app.route("/tech/interventions")
+@require_login
+def tech_interventions():
+    user = get_current_user()
+    if user["role"] != "tech":
+        return redirect(url_for("dashboard"))
+    company = get_current_company(user)
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT * FROM interventions
+        WHERE company_id = ? AND technician_name = ?
+        ORDER BY
+          CASE WHEN status='done' THEN 1 ELSE 0 END,
+          scheduled_date IS NULL,
+          scheduled_date ASC,
+          created_at DESC
+    """, (company["id"], user["username"]))
+    items = c.fetchall()
+    conn.close()
+    return render_template("tech_interventions.html", interventions=items)
+
+@app.route("/tech/interventions/<int:intervention_id>", methods=["GET", "POST"])
+@require_login
+def tech_intervention_detail(intervention_id):
+    user = get_current_user()
+    if user["role"] != "tech":
+        return redirect(url_for("dashboard"))
+    company = get_current_company(user)
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM interventions WHERE id=? AND company_id=? AND technician_name=?",
+              (intervention_id, company["id"], user["username"]))
+    it = c.fetchone()
+    if not it:
+        conn.close()
+        flash("Intervention introuvable.", "error")
+        return redirect(url_for("tech_interventions"))
+
+    # files
+    c.execute("SELECT * FROM intervention_files WHERE intervention_id=? AND company_id=? ORDER BY uploaded_at DESC",
+              (intervention_id, company["id"]))
+    files = c.fetchall()
+
+    if request.method == "POST":
+        status = (request.form.get("status") or it["status"]).strip()
+        note = (request.form.get("tech_notes") or "").strip()
+        try:
+            mins = int(request.form.get("time_spent_minutes") or (it["time_spent_minutes"] or 0))
+        except Exception:
+            mins = int(it["time_spent_minutes"] or 0)
+
+        now = datetime.utcnow().isoformat()
+        started_at = it["started_at"]
+        completed_at = it["completed_at"]
+
+        if status == "in_progress" and not started_at:
+            started_at = now
+        if status == "done" and not completed_at:
+            completed_at = now
+
+        c.execute("""
+            UPDATE interventions
+            SET status=?, tech_notes=?, time_spent_minutes=?, started_at=?, completed_at=?, tech_updated_at=?
+            WHERE id=?
+        """, (status, note, mins, started_at, completed_at, now, intervention_id))
+        conn.commit()
+        conn.close()
+        flash("Mise à jour enregistrée.", "success")
+        return redirect(url_for("tech_intervention_detail", intervention_id=intervention_id))
+
+    conn.close()
+    return render_template("tech_intervention_detail.html", intervention=it, files=files)
+
+@app.route("/tech/interventions/<int:intervention_id>/upload", methods=["POST"])
+@require_login
+def tech_upload_proof(intervention_id):
+    user = get_current_user()
+    if user["role"] != "tech":
+        return "Forbidden", 403
+    company = get_current_company(user)
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Fichier manquant.", "error")
+        return redirect(url_for("tech_intervention_detail", intervention_id=intervention_id))
+
+    # ensure intervention belongs to tech
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM interventions WHERE id=? AND company_id=? AND technician_name=?",
+              (intervention_id, company["id"], user["username"]))
+    it = c.fetchone()
+    if not it:
+        conn.close()
+        return "Forbidden", 403
+
+    safe_name = f"{company['id']}_{intervention_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}_{os.path.basename(f.filename)}"
+    path = os.path.join(_uploads_dir(), safe_name)
+    f.save(path)
+
+    c.execute("""
+        INSERT INTO intervention_files (intervention_id, company_id, filename, filepath, uploaded_by, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (intervention_id, company["id"], os.path.basename(f.filename), path, user["id"], datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+    flash("Preuve ajoutée.", "success")
+    return redirect(url_for("tech_intervention_detail", intervention_id=intervention_id))
+
+@app.route("/uploads/<path:filename>")
+@require_login
+def serve_upload(filename):
+    # Basic protection: only logged in users can access; further checks can be added
+    from flask import send_from_directory
+    return send_from_directory(_uploads_dir(), filename)
+
+@app.route("/tech/interventions/<int:intervention_id>/sign", methods=["POST"])
+@require_login
+def tech_save_signature(intervention_id):
+    user = get_current_user()
+    if user["role"] != "tech":
+        return "Forbidden", 403
+    company = get_current_company(user)
+    sig = (request.form.get("signature_data") or "").strip()
+
+    if not sig.startswith("data:image/png;base64,"):
+        flash("Signature invalide.", "error")
+        return redirect(url_for("tech_intervention_detail", intervention_id=intervention_id))
+
+    b64 = sig.split(",", 1)[1]
+    data = base64.b64decode(b64)
+
+    fname = f"sig_{company['id']}_{intervention_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.png"
+    fpath = os.path.join(_uploads_dir(), fname)
+    with open(fpath, "wb") as fp:
+        fp.write(data)
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM interventions WHERE id=? AND company_id=? AND technician_name=?",
+              (intervention_id, company["id"], user["username"]))
+    it = c.fetchone()
+    if not it:
+        conn.close()
+        return "Forbidden", 403
+
+    now = datetime.utcnow().isoformat()
+    c.execute("UPDATE interventions SET client_signature_path=?, client_signed_at=? WHERE id=?",
+              (fpath, now, intervention_id))
+    conn.commit()
+    conn.close()
+    flash("Signature enregistrée.", "success")
+    return redirect(url_for("tech_intervention_detail", intervention_id=intervention_id))
+
+@app.route("/tech/interventions/<int:intervention_id>/report.pdf")
+@require_login
+def tech_report_pdf(intervention_id):
+    user = get_current_user()
+    if user["role"] != "tech":
+        return "Forbidden", 403
+    company = get_current_company(user)
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM interventions WHERE id=? AND company_id=? AND technician_name=?",
+              (intervention_id, company["id"], user["username"]))
+    it = c.fetchone()
+    if not it:
+        conn.close()
+        return "Not found", 404
+    c.execute("SELECT * FROM intervention_files WHERE intervention_id=? AND company_id=? ORDER BY uploaded_at DESC",
+              (intervention_id, company["id"]))
+    files = c.fetchall()
+    conn.close()
+
+    mem = io.BytesIO()
+    p = canvas.Canvas(mem, pagesize=letter)
+    width, height = letter
+    y = height - 60
+
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, y, "Rapport Technicien - MaintControl")
+    y -= 28
+    p.setFont("Helvetica", 11)
+    p.drawString(50, y, f"Entreprise: {company['name']}")
+    y -= 18
+    p.drawString(50, y, f"Technicien: {user['username']}")
+    y -= 18
+    p.drawString(50, y, f"Intervention #{it['id']}: {it['title']}")
+    y -= 18
+    p.drawString(50, y, f"Statut: {it['status']}  |  Priorité: {it['priority']}")
+    y -= 18
+    if it.get("scheduled_date"):
+        p.drawString(50, y, f"Planifié: {it['scheduled_date'][:10]}")
+        y -= 18
+    p.drawString(50, y, f"Temps passé (min): {it.get('time_spent_minutes') or 0}")
+    y -= 22
+
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(50, y, "Notes technicien")
+    y -= 16
+    p.setFont("Helvetica", 10)
+    note = (it.get("tech_notes") or "-").replace("\r", "")
+    for line in note.split("\n"):
+        p.drawString(50, y, line[:120])
+        y -= 14
+        if y < 120:
+            p.showPage()
+            y = height - 60
+            p.setFont("Helvetica", 10)
+
+    y -= 10
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(50, y, "Preuves (fichiers)")
+    y -= 16
+    p.setFont("Helvetica", 10)
+    if not files:
+        p.drawString(50, y, "-")
+        y -= 14
+    else:
+        for f in files[:15]:
+            p.drawString(50, y, f"- {f['filename']} ({f['uploaded_at']})")
+            y -= 14
+            if y < 120:
+                p.showPage()
+                y = height - 60
+                p.setFont("Helvetica", 10)
+
+    # Signature image if exists
+    sig_path = it.get("client_signature_path")
+    if sig_path and os.path.exists(sig_path):
+        y -= 10
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(50, y, "Signature client")
+        y -= 10
+        try:
+            p.drawImage(sig_path, 50, max(40, y-140), width=220, height=120, preserveAspectRatio=True, mask='auto')
+            y -= 150
+        except Exception:
+            pass
+
+    p.showPage()
+    p.save()
+    mem.seek(0)
+    return send_file(mem, mimetype="application/pdf", as_attachment=True, download_name=f"rapport_tech_{it['id']}.pdf")
+
 # ---------- Exports ----------
 
 @app.route("/interventions/export/csv")
@@ -588,6 +970,8 @@ def edit_intervention(intervention_id):
 def export_csv():
     user = get_current_user()
     company = get_current_company(user)
+    if user["role"] not in ("admin","manager"):
+        return "Forbidden", 403
     if is_trial_expired(user) and not user["is_activated"] and user["role"] != "admin":
         return "Trial expiré - export CSV réservé aux comptes activés.", 403
 
@@ -610,8 +994,8 @@ def export_csv():
     category = request.args.get("category", "").strip()
     client = request.args.get("client_name", "").strip()
     technician = request.args.get("technician_name", "").strip()
-    date_from = request.args.get("date_from", "").strip()
-    date_to = request.args.get("date_to", "").strip()
+    date_from = normalize_iso_bound((request.args.get("date_from") or ""), is_end=False)
+    date_to = normalize_iso_bound((request.args.get("date_to") or ""), is_end=True)
 
     if status:
         base_query += " AND status = ?"
@@ -626,13 +1010,11 @@ def export_csv():
         base_query += " AND category = ?"
         params.append(category)
     if client:
-        # Recherche partielle sur le client chantier
-        base_query += " AND client_name LIKE ?"
-        params.append(f"%{client}%")
+        base_query += " AND client_name = ?"
+        params.append(client)
     if technician:
-        # Recherche partielle sur le technicien
-        base_query += " AND technician_name LIKE ?"
-        params.append(f"%{technician}%")
+        base_query += " AND technician_name = ?"
+        params.append(technician)
     if date_from:
         base_query += " AND created_at >= ?"
         params.append(date_from)
@@ -646,16 +1028,13 @@ def export_csv():
     conn.close()
 
     output = io.StringIO()
-    # CSV adapté à Excel FR : séparateur ';'
-    writer = csv.writer(output, delimiter=';')
+    writer = csv.writer(output, delimiter=";")
     writer.writerow([col for col in rows[0].keys()] if rows else [])
     for row in rows:
         writer.writerow([row[col] for col in row.keys()])
 
     mem = io.BytesIO()
-    # Ajout d'un BOM UTF-8 pour une ouverture correcte dans Excel
-    mem.write('\ufeff'.encode('utf-8'))
-    mem.write(output.getvalue().encode("utf-8"))
+    mem.write(output.getvalue().encode("utf-8-sig"))
     mem.seek(0)
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="interventions.csv")
 
@@ -664,6 +1043,8 @@ def export_csv():
 def export_pdf():
     user = get_current_user()
     company = get_current_company(user)
+    if user["role"] not in ("admin","manager"):
+        return "Forbidden", 403
     if is_trial_expired(user) and not user["is_activated"] and user["role"] != "admin":
         return "Trial expiré - export PDF réservé aux comptes activés.", 403
 
@@ -686,8 +1067,8 @@ def export_pdf():
     category = request.args.get("category", "").strip()
     client = request.args.get("client_name", "").strip()
     technician = request.args.get("technician_name", "").strip()
-    date_from = request.args.get("date_from", "").strip()
-    date_to = request.args.get("date_to", "").strip()
+    date_from = normalize_iso_bound((request.args.get("date_from") or ""), is_end=False)
+    date_to = normalize_iso_bound((request.args.get("date_to") or ""), is_end=True)
 
     if status:
         base_query += " AND status = ?"
@@ -702,13 +1083,11 @@ def export_pdf():
         base_query += " AND category = ?"
         params.append(category)
     if client:
-        # Recherche partielle sur le client chantier
-        base_query += " AND client_name LIKE ?"
-        params.append(f"%{client}%")
+        base_query += " AND client_name = ?"
+        params.append(client)
     if technician:
-        # Recherche partielle sur le technicien
-        base_query += " AND technician_name LIKE ?"
-        params.append(f"%{technician}%")
+        base_query += " AND technician_name = ?"
+        params.append(technician)
     if date_from:
         base_query += " AND created_at >= ?"
         params.append(date_from)
@@ -730,13 +1109,6 @@ def export_pdf():
     y -= 25
     p.setFont("Helvetica", 9)
 
-    if not rows:
-        p.drawString(50, y, "Aucune intervention ne correspond à ces filtres.")
-        p.showPage()
-        p.save()
-        mem.seek(0)
-        return send_file(mem, mimetype="application/pdf", as_attachment=True, download_name="interventions.pdf")
-
     for row in rows:
         line = f"#{row['id']} | {row['title']} | {row['status']} | {row['priority']} | {row['kind'] or ''} | {row['category'] or ''} | {row['client_name'] or ''} | {row['technician_name'] or ''} | {row['scheduled_date'] or ''}"
         if y < 50:
@@ -751,71 +1123,103 @@ def export_pdf():
     mem.seek(0)
     return send_file(mem, mimetype="application/pdf", as_attachment=True, download_name="interventions.pdf")
 
-@app.route("/interventions/<int:intervention_id>/pdf")
+
+@app.route("/interventions/export/email", methods=["POST"])
 @require_login
-def intervention_pdf(intervention_id):
+def export_email():
     user = get_current_user()
     company = get_current_company(user)
+    if user["role"] not in ("admin", "manager"):
+        return "Forbidden", 403
+
+    to_emails = (request.form.get("to_emails") or "").strip()
+    subject = (request.form.get("subject") or "Export MaintControl").strip()
+    body = (request.form.get("body") or "").strip()
+    fmt = (request.form.get("format") or "pdf").lower()
+
+    if not to_emails:
+        flash("Email destinataire manquant.", "error")
+        return redirect(url_for("interventions"))
+
+    # Build same query as exports
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM interventions WHERE id = ? AND company_id = ?", (intervention_id, company["id"]))
-    row = c.fetchone()
+    base_query = "SELECT * FROM interventions WHERE company_id = ?"
+    params = [company["id"]]
+
+    status = (request.form.get("status") or "").strip()
+    priority = (request.form.get("priority") or "").strip()
+    kind = (request.form.get("kind") or "").strip()
+    category = (request.form.get("category") or "").strip()
+    client = (request.form.get("client_name") or "").strip()
+    technician = (request.form.get("technician_name") or "").strip()
+    date_from = normalize_iso_bound((request.form.get("date_from") or ""), is_end=False)
+    date_to = normalize_iso_bound((request.form.get("date_to") or ""), is_end=True)
+
+    if status:
+        base_query += " AND status = ?"; params.append(status)
+    if priority:
+        base_query += " AND priority = ?"; params.append(priority)
+    if kind:
+        base_query += " AND kind = ?"; params.append(kind)
+    if category:
+        base_query += " AND category = ?"; params.append(category)
+    if client:
+        base_query += " AND client_name = ?"; params.append(client)
+    if technician:
+        base_query += " AND technician_name = ?"; params.append(technician)
+    if date_from:
+        base_query += " AND created_at >= ?"; params.append(date_from)
+    if date_to:
+        base_query += " AND created_at <= ?"; params.append(date_to)
+
+    base_query += " ORDER BY created_at DESC"
+    c.execute(base_query, tuple(params))
+    rows = c.fetchall()
     conn.close()
-    if not row:
-        return "Not found", 404
 
-    if user["role"] == "tech" and row["technician_name"] not in (None, "", user["username"]):
-        return "Forbidden", 403
-    if user["role"] == "client" and row["client_name"] not in (None, "", user["username"]):
-        return "Forbidden", 403
+    attachments = []
+    if fmt == "csv":
+        out = io.StringIO()
+        w = csv.writer(out, delimiter=";")
+        w.writerow([col for col in rows[0].keys()] if rows else [])
+        for r in rows:
+            w.writerow([r[col] for col in r.keys()])
+        data = out.getvalue().encode("utf-8-sig")
+        attachments.append(("interventions.csv", "text/csv", data))
+    else:
+        mem = io.BytesIO()
+        p = canvas.Canvas(mem, pagesize=letter)
+        width, height = letter
+        y = height - 60
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(50, y, f"Export interventions - {company['name']}")
+        y -= 22
+        p.setFont("Helvetica", 10)
+        if not rows:
+            p.drawString(50, y, "Aucune intervention ne correspond à ces filtres.")
+        else:
+            for r in rows[:60]:
+                line = f"#{r['id']} | {r['status']} | {r['priority']} | {r['title']}"
+                p.drawString(50, y, line[:120])
+                y -= 14
+                if y < 80:
+                    p.showPage()
+                    y = height - 60
+                    p.setFont("Helvetica", 10)
+        p.showPage()
+        p.save()
+        mem.seek(0)
+        attachments.append(("interventions.pdf", "application/pdf", mem.getvalue()))
 
-    mem = io.BytesIO()
-    p = canvas.Canvas(mem, pagesize=letter)
-    width, height = letter
-    y = height - 50
+    try:
+        send_email_smtp(to_emails, subject, body, attachments)
+        flash("Email envoyé.", "success")
+    except Exception as e:
+        flash(f"Erreur email: {e}", "error")
 
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(50, y, f"Intervention #{row['id']} - {row['title']}")
-    y -= 25
+    return redirect(url_for("interventions"))
 
-    p.setFont("Helvetica", 10)
-    fields = [
-        ("Entreprise", company["name"]),
-        ("Statut", row["status"]),
-        ("Priorité", row["priority"]),
-        ("Type", row["kind"] or ""),
-        ("Catégorie", row["category"] or ""),
-        ("Client chantier", row["client_name"] or ""),
-        ("Technicien", row["technician_name"] or ""),
-        ("Créée le", row["created_at"] or ""),
-        ("Planifiée pour", row["scheduled_date"] or ""),
-    ]
-
-    for label, value in fields:
-        p.drawString(50, y, f"{label} : {value}")
-        y -= 14
-
-    y -= 10
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(50, y, "Description")
-    y -= 16
-    p.setFont("Helvetica", 10)
-
-    desc = row["description"] or ""
-    for line in desc.splitlines() or [""]:
-        chunks = [line[i:i+90] for i in range(0, len(line), 90)] or [""]
-        for ch in chunks:
-            if y < 50:
-                p.showPage()
-                y = height - 50
-                p.setFont("Helvetica", 10)
-            p.drawString(50, y, ch)
-            y -= 12
-
-    p.showPage()
-    p.save()
-    mem.seek(0)
-    return send_file(mem, mimetype="application/pdf", as_attachment=True, download_name=f"intervention_{row['id']}.pdf")
 
 @app.route("/interventions/export/advanced")
 @require_login
@@ -849,10 +1253,10 @@ def planning():
     today = datetime.utcnow().date()
     today_list, overdue, upcoming = [], [], []
     for it in all_sched:
-        dt = parse_planning_date(it["scheduled_date"])
-        if not dt:
+        try:
+            d = datetime.fromisoformat(it["scheduled_date"]).date()
+        except Exception:
             continue
-        d = dt.date()
         if d == today:
             today_list.append(it)
         elif d < today and it["status"] != "done":

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>#{{ intervention.id }} — {{ intervention.title }}</h1>
+
+<div class="grid-two">
+  <section class="card">
+    <h2 data-i18n="tech_details">Détails</h2>
+    <p><strong data-i18n="col_description">Description</strong> : {{ intervention.description or '-' }}</p>
+    <p><strong data-i18n="col_client">Client</strong> : {{ intervention.client_name or '-' }}</p>
+    <p><strong data-i18n="col_planned">Planifié</strong> : {{ intervention.scheduled_date[:10] if intervention.scheduled_date else '-' }}</p>
+    <p><strong data-i18n="tech_started">Début</strong> : {{ intervention.started_at or '-' }}</p>
+    <p><strong data-i18n="tech_completed">Fin</strong> : {{ intervention.completed_at or '-' }}</p>
+    <p><strong data-i18n="tech_time_spent">Temps passé (min)</strong> : {{ intervention.time_spent_minutes or 0 }}</p>
+    <div style="margin-top:0.75rem;">
+      <a class="btn btn-small" href="{{ url_for('tech_report_pdf', intervention_id=intervention.id) }}">PDF</a>
+      <a class="btn btn-small" href="{{ url_for('tech_interventions') }}" data-i18n="back">Retour</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="tech_update">Mise à jour</h2>
+    <form method="post">
+      <label>
+        <span data-i18n="col_status">Statut</span>
+        <select name="status">
+          <option value="open" {% if intervention.status=='open' %}selected{% endif %}>open</option>
+          <option value="in_progress" {% if intervention.status=='in_progress' %}selected{% endif %}>in_progress</option>
+          <option value="done" {% if intervention.status=='done' %}selected{% endif %}>done</option>
+        </select>
+      </label>
+
+      <label>
+        <span data-i18n="tech_time_spent">Temps passé (min)</span>
+        <input type="number" name="time_spent_minutes" min="0" step="5" value="{{ intervention.time_spent_minutes or 0 }}">
+      </label>
+
+      <label>
+        <span data-i18n="tech_notes">Notes technicien</span>
+        <textarea name="tech_notes" rows="6">{{ intervention.tech_notes or '' }}</textarea>
+      </label>
+
+      <button class="btn primary" type="submit" data-i18n="save">Enregistrer</button>
+    </form>
+  </section>
+</div>
+
+<div class="grid-two" style="margin-top:1rem;">
+  <section class="card">
+    <h2 data-i18n="tech_proofs">Preuves</h2>
+    <form method="post" action="{{ url_for('tech_upload_proof', intervention_id=intervention.id) }}" enctype="multipart/form-data">
+      <input type="file" name="file" accept="image/*,application/pdf">
+      <button class="btn btn-small primary" type="submit" data-i18n="tech_add_proof">Ajouter</button>
+    </form>
+
+    {% if files %}
+      <div style="margin-top:0.75rem; display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:0.5rem;">
+        {% for f in files %}
+          {% set basename = f.filepath.split('/')[-1] %}
+          <a href="{{ url_for('serve_upload', filename=basename) }}" target="_blank" class="card" style="padding:0.5rem;">
+            <div style="font-size:12px; word-break:break-word;">{{ f.filename }}</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="opacity:0.8;">-</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="tech_signature">Signature client</h2>
+    <p style="opacity:0.8;" data-i18n="tech_signature_hint">Faites signer le client sur l'écran puis enregistrez.</p>
+
+    <canvas id="sigPad" width="420" height="180" style="border:1px solid #ddd; border-radius:12px; width:100%;"></canvas>
+    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+      <button class="btn btn-small" type="button" id="sigClear" data-i18n="clear">Effacer</button>
+      <form method="post" action="{{ url_for('tech_save_signature', intervention_id=intervention.id) }}">
+        <input type="hidden" name="signature_data" id="sigData">
+        <button class="btn btn-small primary" type="submit" id="sigSave" data-i18n="save">Enregistrer</button>
+      </form>
+    </div>
+
+    {% if intervention.client_signature_path %}
+      {% set sigbase = intervention.client_signature_path.split('/')[-1] %}
+      <div style="margin-top:0.75rem;">
+        <strong data-i18n="tech_signature_saved">Signature enregistrée</strong>
+        <div><a class="btn btn-small" href="{{ url_for('serve_upload', filename=sigbase) }}" target="_blank">PNG</a></div>
+      </div>
+    {% endif %}
+  </section>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('sigPad');
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+
+  function getPos(e){
+    const r = canvas.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+    return {x, y};
+  }
+
+  function start(e){ drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e){ if(!drawing) return; const p=getPos(e); ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+  function end(e){ drawing=false; e.preventDefault(); }
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+
+  canvas.addEventListener('touchstart', start, {passive:false});
+  canvas.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('touchend', end, {passive:false});
+
+  document.getElementById('sigClear').addEventListener('click', function(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  });
+
+  document.getElementById('sigSave').addEventListener('click', function(){
+    document.getElementById('sigData').value = canvas.toDataURL('image/png');
+  });
+})();
+</script>
+{% endblock %}

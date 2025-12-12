@@ -54,9 +54,10 @@
     <span data-i18n="col_priority">Priorité</span>
     {% set pr = intervention.priority if intervention else 'medium' %}
     <select name="priority">
-      <option value="low" {% if pr=='low' %}selected{% endif %}>Basse</option>
-      <option value="medium" {% if pr=='medium' %}selected{% endif %}>Moyenne</option>
-      <option value="high" {% if pr=='high' %}selected{% endif %}>Haute</option>
+      <option value="critical" {% if intervention and intervention.priority=="critical" %}selected{% endif %} data-i18n="prio_critical">Critical</option>
+      <option value="high" {% if intervention and intervention.priority=="high" %}selected{% endif %} data-i18n="prio_high">Haute</option>
+      <option value="medium" {% if intervention and intervention.priority=="medium" %}selected{% endif %} data-i18n="prio_medium">Moyenne</option>
+      <option value="low" {% if intervention and intervention.priority=="low" %}selected{% endif %} data-i18n="prio_low">Basse</option>
     </select>
   </label>
 
@@ -85,7 +86,7 @@
 
   <label>
     <span data-i18n="col_scheduled">Date planifiée (ISO)</span>
-    <input type="text" name="scheduled_date" placeholder="2025-01-01T10:00:00" value="{{ intervention.scheduled_date if intervention else '' }}">
+    <input type="date" name="scheduled_date" value="{{ (intervention.scheduled_date[:10] if intervention and intervention.scheduled_date else '') }}">
   </label>
 
   <div class="form-actions">

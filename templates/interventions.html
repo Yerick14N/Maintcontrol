@@ -22,9 +22,10 @@
   </select>
   <select name="priority">
     <option value="">{{ 'Toutes priorités' }}</option>
-    <option value="low" {% if request.args.get('priority')=='low' %}selected{% endif %}>Basse</option>
-    <option value="medium" {% if request.args.get('priority')=='medium' %}selected{% endif %}>Moyenne</option>
+    <option value="critical" {% if request.args.get('priority')=='critical' %}selected{% endif %}>Critical</option>
     <option value="high" {% if request.args.get('priority')=='high' %}selected{% endif %}>Haute</option>
+    <option value="medium" {% if request.args.get('priority')=='medium' %}selected{% endif %}>Moyenne</option>
+    <option value="low" {% if request.args.get('priority')=='low' %}selected{% endif %}>Basse</option>
   </select>
   <select name="kind">
     <option value="">{{ 'Tous types' }}</option>
@@ -79,4 +80,47 @@
     {% endfor %}
   </tbody>
 </table>
+
+{% if current_user.role in ['admin','manager'] %}
+<div class="card" style="margin-top:1rem;">
+  <h2 data-i18n="email_export_title">Envoyer un export par email</h2>
+  <form method="post" action="{{ url_for('export_email') }}">
+    <div class="grid-two">
+      <label>
+        <span data-i18n="email_to">À (emails, séparés par virgule)</span>
+        <input type="text" name="to_emails" placeholder="ex: chef@entreprise.com, client@entreprise.com">
+      </label>
+      <label>
+        <span data-i18n="email_format">Format</span>
+        <select name="format">
+          <option value="pdf">PDF</option>
+          <option value="csv">CSV</option>
+        </select>
+      </label>
+    </div>
+    <label>
+      <span data-i18n="email_subject">Sujet</span>
+      <input type="text" name="subject" value="Export MaintControl">
+    </label>
+    <label>
+      <span data-i18n="email_body">Message</span>
+      <textarea name="body" rows="3"></textarea>
+    </label>
+
+    {# pass current filters if present in querystring #}
+    <input type="hidden" name="status" value="{{ request.args.get('status','') }}">
+    <input type="hidden" name="priority" value="{{ request.args.get('priority','') }}">
+    <input type="hidden" name="kind" value="{{ request.args.get('kind','') }}">
+    <input type="hidden" name="category" value="{{ request.args.get('category','') }}">
+    <input type="hidden" name="client_name" value="{{ request.args.get('client_name','') }}">
+    <input type="hidden" name="technician_name" value="{{ request.args.get('technician_name','') }}">
+    <input type="hidden" name="date_from" value="{{ request.args.get('date_from','') }}">
+    <input type="hidden" name="date_to" value="{{ request.args.get('date_to','') }}">
+
+    <button class="btn primary" type="submit" data-i18n="send">Envoyer</button>
+  </form>
+  <p style="opacity:0.75; margin-top:0.5rem;" data-i18n="email_smtp_hint">Configure SMTP_* et FROM_EMAIL sur Render pour activer l'envoi.</p>
+</div>
+{% endif %}
+
 {% endblock %}

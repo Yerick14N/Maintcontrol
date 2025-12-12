@@ -29,11 +29,12 @@
       <label>
         <span data-i18n="col_priority">Priorité</span>
         <select name="priority">
-          <option value=""></option>
-          <option value="low">Basse</option>
-          <option value="medium">Moyenne</option>
-          <option value="high">Haute</option>
-        </select>
+        <option value="" data-i18n="all">Tous</option>
+        <option value="critical" data-i18n="prio_critical">Critical</option>
+        <option value="high" data-i18n="prio_high">Haute</option>
+        <option value="medium" data-i18n="prio_medium">Moyenne</option>
+        <option value="low" data-i18n="prio_low">Basse</option>
+      </select>
       </label>
     </div>
     <div>
@@ -58,11 +59,11 @@
       </label>
       <label>
         <span>Date de début (created_at ≥)</span>
-        <input type="text" name="date_from" placeholder="2025-01-01T00:00:00">
+        <input type="date" name="date_from" value="{{ (filters.date_from[:10] if filters and filters.date_from else '') }}">
       </label>
       <label>
         <span>Date de fin (created_at ≤)</span>
-        <input type="text" name="date_to" placeholder="2025-12-31T23:59:59">
+        <input type="date" name="date_to" value="{{ (filters.date_to[:10] if filters and filters.date_to else '') }}">
       </label>
     </div>
   </div>
